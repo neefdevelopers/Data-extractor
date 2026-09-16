@@ -18,6 +18,7 @@ from app.schemas.location import (
 )
 from app.utils.text_normalization import canonical_key, clean_display_text, ci_contains
 from app.utils.cleaning import normalize_pincode
+from app.utils.district_normalization import normalize_district_name
 
 def sql_is_unknown_pin():
     return or_(
@@ -188,9 +189,10 @@ class LocationService:
 
         # Clean and normalize new values
         clean_pin, pin_valid = normalize_pincode(req.pincode) if req.pincode else (None, False)
-        clean_dist = clean_display_text(req.district, title_case=True)
+        norm_dist, inferred_st = normalize_district_name(req.district, state_hint=req.state) if req.district else (None, req.state)
+        clean_dist = norm_dist or clean_display_text(req.district, title_case=True)
         clean_po = clean_display_text(req.post_office, title_case=True)
-        clean_st = clean_display_text(req.state, title_case=True)
+        clean_st = clean_display_text(inferred_st or req.state, title_case=True)
 
         if req.pincode:
             if not pin_valid and req.pincode.strip():
@@ -246,9 +248,10 @@ class LocationService:
             return {"updated_count": 0, "message": "No customers selected."}
 
         clean_pin, pin_valid = normalize_pincode(req.pincode) if req.pincode else (None, False)
-        clean_dist = clean_display_text(req.district, title_case=True)
+        norm_dist, inferred_st = normalize_district_name(req.district, state_hint=req.state) if req.district else (None, req.state)
+        clean_dist = norm_dist or clean_display_text(req.district, title_case=True)
         clean_po = clean_display_text(req.post_office, title_case=True)
-        clean_st = clean_display_text(req.state, title_case=True)
+        clean_st = clean_display_text(inferred_st or req.state, title_case=True)
 
         if req.pincode and not pin_valid:
             raise ValueError(f"Invalid PIN code '{req.pincode}'. Must be a 6-digit number.")

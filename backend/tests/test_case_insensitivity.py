@@ -196,3 +196,35 @@ def test_safe_deduplication_and_merge(db_session):
     assert merged_cust.total_spend == 2500.0
     assert merged_cust.full_address == "House #12, Calicut Road"
     assert merged_cust.district == "Malappuram"
+
+def test_district_canonical_normalization(db_session):
+    # Customers with various historical/spelling variations of Kozhikode & Calicut
+    c1 = Customer(customer_name="Cust 1", contact_number="98765001", district="Kozhikode", pincode="673001")
+    c2 = Customer(customer_name="Cust 2", contact_number="98765002", district="Calicut", pincode="673002")
+    c3 = Customer(customer_name="Cust 3", contact_number="98765003", district="Kozhikkode", pincode="673003")
+    c4 = Customer(customer_name="Cust 4", contact_number="98765004", district="-Kozhikode", pincode="673004")
+    c5 = Customer(customer_name="Cust 5", contact_number="98765005", district="Kozhikode, Feroke kallikkudam", pincode="673631")
+    db_session.add_all([c1, c2, c3, c4, c5])
+    db_session.commit()
+
+    now = datetime.datetime.utcnow()
+    for idx, c in enumerate([c1, c2, c3, c4, c5], 1):
+        db_session.add(Order(
+            order_number=f"ORD-KOZH-{idx}",
+            customer_id=c.id,
+            order_date=now,
+            payment_mode="COD",
+            order_status="DELIVERED",
+            total_amount=500.0
+        ))
+    db_session.commit()
+
+    dist_analytics = AnalyticsService.get_district_analytics(db_session)
+    # Ensure there is only 1 entry for Kozhikode across all variations
+    kozh_entries = [d for d in dist_analytics if "kozh" in d["district"].lower() or "calicut" in d["district"].lower()]
+    assert len(kozh_entries) == 1
+    assert kozh_entries[0]["district"] == "Kozhikode"
+    assert kozh_entries[0]["customer_count"] == 5
+    assert kozh_entries[0]["total_orders"] == 5
+    assert kozh_entries[0]["total_revenue"] == 2500.0
+

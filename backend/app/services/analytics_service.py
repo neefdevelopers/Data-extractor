@@ -10,6 +10,7 @@ from app.models.employee import Employee
 from app.models.order_item import OrderItem
 from app.services.revenue_service import RevenueService
 from app.utils.text_normalization import canonical_key, clean_display_text, ci_contains, ci_equals
+from app.utils.district_normalization import normalize_district_name
 
 class AnalyticsService:
     @staticmethod
@@ -203,17 +204,17 @@ class AnalyticsService:
         # Group districts using canonical key while preserving clean display name
         district_data: Dict[str, Dict[str, Any]] = {}
         for c in customers:
-            raw_dist = c.district or "Unassigned / Unknown"
-            d_key = canonical_key(raw_dist) or "unassigned"
+            canonical_dist, canonical_st = normalize_district_name(c.district, state_hint=c.state)
+            dist_name = canonical_dist or (clean_display_text(c.district, title_case=True) if c.district else "Unassigned / Unknown")
+            d_key = canonical_key(dist_name) or "unassigned"
 
-            if search and not ci_contains(raw_dist, search):
+            if search and not (ci_contains(dist_name, search) or (c.district and ci_contains(c.district, search))):
                 continue
 
             if d_key not in district_data:
-                display_name = clean_display_text(raw_dist, title_case=True) or "Unassigned / Unknown"
                 district_data[d_key] = {
-                    "district": display_name,
-                    "state": clean_display_text(c.state, title_case=True),
+                    "district": dist_name,
+                    "state": canonical_st or clean_display_text(c.state, title_case=True),
                     "customer_count": 0,
                     "total_orders": 0,
                     "total_revenue": 0.0
@@ -233,27 +234,33 @@ class AnalyticsService:
     def get_pincode_analytics(db: Session, district: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
         eligible_statuses = RevenueService.get_eligible_statuses(db)
         eligible_norm = {canonical_key(s) for s in eligible_statuses}
-        query = db.query(Customer)
-        if district:
-            clean_dist = canonical_key(district)
-            query = query.filter(func.lower(func.trim(Customer.district)).like(f"%{clean_dist}%"))
+        customers = db.query(Customer).all()
         
-        customers = query.all()
+        target_dist_canonical, _ = normalize_district_name(district) if district else (None, None)
+        target_dist_key = canonical_key(target_dist_canonical or district) if district else None
+
         pin_data: Dict[str, Dict[str, Any]] = {}
         for c in customers:
+            c_dist_canonical, c_state_canonical = normalize_district_name(c.district, state_hint=c.state)
+            c_dist_key = canonical_key(c_dist_canonical or c.district)
+
+            if target_dist_key:
+                if c_dist_key != target_dist_key and not ci_contains(c.district, district):
+                    continue
+
             pin = (c.pincode or "Unknown").strip()
             pin_key = canonical_key(pin) or "unknown"
 
             if search:
-                if not (ci_contains(pin, search) or (c.district and ci_contains(c.district, search))):
+                if not (ci_contains(pin, search) or (c.district and ci_contains(c.district, search)) or (c_dist_canonical and ci_contains(c_dist_canonical, search))):
                     continue
 
             if pin_key not in pin_data:
-                display_dist = clean_display_text(c.district, title_case=True) or "Unknown"
+                display_dist = c_dist_canonical or clean_display_text(c.district, title_case=True) or "Unknown"
                 pin_data[pin_key] = {
                     "pincode": pin,
                     "district": display_dist,
-                    "state": clean_display_text(c.state, title_case=True),
+                    "state": c_state_canonical or clean_display_text(c.state, title_case=True),
                     "customer_count": 0,
                     "total_orders": 0,
                     "total_revenue": 0.0

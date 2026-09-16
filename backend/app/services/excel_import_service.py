@@ -28,6 +28,7 @@ from app.utils.cleaning import (
     clean_address
 )
 from app.utils.text_normalization import canonical_key, clean_display_text, ci_equals
+from app.utils.district_normalization import normalize_district_name
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "../uploads")
 
@@ -305,8 +306,8 @@ class ExcelImportService:
                 elif cust_key and cust_key in name_pin_cache:
                     matched_cust = name_pin_cache[cust_key]
 
-                clean_district = clean_display_text(raw_district, title_case=True)
-                clean_state = clean_display_text(raw_state, title_case=True)
+                clean_district, inferred_state = normalize_district_name(raw_district, state_hint=raw_state)
+                clean_state = clean_display_text(inferred_state or raw_state, title_case=True)
                 clean_po_formatted = clean_display_text(raw_po, title_case=True)
 
                 if matched_cust:
