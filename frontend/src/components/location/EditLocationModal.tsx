@@ -5,21 +5,14 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Sparkles,
-  Info,
-  Phone,
-  Home,
-  ShoppingBag,
-  IndianRupee,
-  FileText,
-  AlertTriangle
+  Info
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { UnknownLocationRecord, PostalOffice } from '../../types';
 import { postalApi } from '../../services/postalApi';
 import { locationApi } from '../../services/locationApi';
-import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 
 interface EditLocationModalProps {
   isOpen: boolean;
@@ -153,15 +146,12 @@ export const EditLocationModal: React.FC<EditLocationModalProps> = ({
 
   if (!record) return null;
 
-  const isUnknownDistrict = !record.district || record.district.toLowerCase().includes('unknown') || record.district.toLowerCase().includes('unassigned');
-  const isUnknownPincode = !record.pincode || record.pincode.toLowerCase().includes('unknown') || record.pincode === '000000' || record.pincode.length !== 6;
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Correct Location Details"
-      maxWidth="2xl"
+      maxWidth="4xl"
       actionFooter={
         <div className="flex items-center justify-between w-full">
           <div className="text-xs text-slate-500">
@@ -193,79 +183,75 @@ export const EditLocationModal: React.FC<EditLocationModalProps> = ({
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* SECTION 1: Complete Full Row Details of Customer on File     */}
+        {/* SECTION 1: Exact Full Row Details as in Table                 */}
         {/* ------------------------------------------------------------- */}
-        <div className="border border-slate-200 rounded-xl bg-slate-50/70 p-4 space-y-3.5 shadow-2xs">
-          {/* Header Row */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold text-slate-900">{record.customer_name}</h4>
-                <span className="text-[11px] font-mono font-semibold bg-white border border-slate-300 text-slate-600 px-2 py-0.5 rounded">
-                  ID #{record.id}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-mono font-medium">{record.contact_number || record.normalized_contact || 'No Contact Number'}</span>
-              </div>
-            </div>
+        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-slate-50/50 shadow-2xs">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-100/90 border-b border-slate-200 text-slate-500 uppercase font-semibold text-[10px] tracking-wider">
+              <tr>
+                <th className="p-3 pl-3.5">Customer Information</th>
+                <th className="p-3">Address on File</th>
+                <th className="p-3">District</th>
+                <th className="p-3">Pincode</th>
+                <th className="p-3 pr-3.5">Orders & Spend</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              <tr>
+                <td className="p-3 pl-3.5 align-top">
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-slate-900 block">{record.customer_name}</span>
+                    <span className="text-slate-500 text-[11px] block">
+                      {record.contact_number || record.normalized_contact || 'No Contact'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">ID #{record.id}</span>
+                  </div>
+                </td>
 
-            {/* Issue Badges */}
-            <div className="flex items-center gap-1.5">
-              {isUnknownDistrict && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                  <AlertTriangle className="w-3 h-3 text-rose-600" /> Unknown District
-                </span>
-              )}
-              {isUnknownPincode && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  <AlertTriangle className="w-3 h-3 text-amber-600" /> Unknown Pincode
-                </span>
-              )}
-            </div>
-          </div>
+                <td className="p-3 align-top max-w-xs">
+                  <p className="text-slate-700 text-[11px] leading-relaxed">
+                    {record.full_address || <span className="text-slate-400 italic">No address on file</span>}
+                  </p>
+                  {record.post_office && (
+                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                      PO: {record.post_office}
+                    </span>
+                  )}
+                </td>
 
-          {/* Full Address on File */}
-          <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1 shadow-2xs">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-              <Home className="w-3 h-3 text-slate-400" /> Full Shipping Address on File
-            </span>
-            <p className="text-xs text-slate-800 leading-relaxed font-medium">
-              {record.full_address || <span className="text-slate-400 italic">No street address provided in raw file</span>}
-            </p>
-          </div>
+                <td className="p-3 align-top">
+                  {record.district ? (
+                    <span className="font-semibold text-slate-900">{record.district}</span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                      Unknown District
+                    </span>
+                  )}
+                </td>
 
-          {/* Current Row Values Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-            <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-              <span className="text-[10px] font-semibold text-slate-500 block uppercase">District on File</span>
-              <span className={`font-bold mt-0.5 block ${isUnknownDistrict ? 'text-rose-600' : 'text-slate-900'}`}>
-                {record.district || 'Unknown'}
-              </span>
-            </div>
+                <td className="p-3 align-top">
+                  {record.pincode ? (
+                    <span className="font-bold text-slate-900 font-mono tracking-wider">
+                      {record.pincode}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      Unknown PIN
+                    </span>
+                  )}
+                </td>
 
-            <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-              <span className="text-[10px] font-semibold text-slate-500 block uppercase">Pincode on File</span>
-              <span className={`font-mono font-bold mt-0.5 block ${isUnknownPincode ? 'text-amber-600' : 'text-slate-900'}`}>
-                {record.pincode || 'Unknown'}
-              </span>
-            </div>
-
-            <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-              <span className="text-[10px] font-semibold text-slate-500 block uppercase">Post Office</span>
-              <span className="text-slate-800 font-medium mt-0.5 block truncate">
-                {record.post_office || '—'}
-              </span>
-            </div>
-
-            <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-              <span className="text-[10px] font-semibold text-slate-500 block uppercase">Total Spend & Orders</span>
-              <span className="text-emerald-600 font-bold mt-0.5 block">
-                {formatCurrency(record.total_spend)} <span className="text-slate-500 font-normal text-[11px]">({record.total_orders})</span>
-              </span>
-            </div>
-          </div>
+                <td className="p-3 pr-3.5 align-top">
+                  <div className="space-y-0.5 text-[11px]">
+                    <span className="font-bold text-slate-800 block">
+                      {formatCurrency(record.total_spend)}
+                    </span>
+                    <span className="text-slate-500">{record.total_orders} Orders</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         {/* ------------------------------------------------------------- */}
