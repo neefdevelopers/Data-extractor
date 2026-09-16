@@ -14,7 +14,8 @@ from app.api import (
     rfm_router,
     reports_router,
     data_quality_router,
-    settings_router
+    settings_router,
+    locations_router
 )
 
 @asynccontextmanager
@@ -56,6 +57,8 @@ app.include_router(rfm_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(data_quality_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(locations_router, prefix="/api")
+
 
 @app.get("/")
 def root():

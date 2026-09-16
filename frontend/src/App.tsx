@@ -10,6 +10,7 @@ import { Uploads } from './pages/Uploads';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { DataDrilldown } from './pages/DataDrilldown';
+import { UnknownLocations } from './pages/UnknownLocations';
 
 export const App: React.FC = () => {
   return (
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
           <Route path="geography" element={<GeographicAnalytics />} />
           <Route path="rfm" element={<RfmAnalytics />} />
           <Route path="drilldown" element={<DataDrilldown />} />
+          <Route path="unknown-locations" element={<UnknownLocations />} />
           <Route path="uploads" element={<Uploads />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />

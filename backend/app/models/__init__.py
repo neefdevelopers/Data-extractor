@@ -9,6 +9,7 @@ from app.models.rfm import RFMScore, RFMSegmentRule
 from app.models.data_quality import DataQualityIssue
 from app.models.settings import SystemSetting
 from app.models.user import User
+from app.models.location_audit import LocationCorrectionAudit
 
 __all__ = [
     "Customer",
@@ -25,4 +26,6 @@ __all__ = [
     "DataQualityIssue",
     "SystemSetting",
     "User",
+    "LocationCorrectionAudit",
 ]
+

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   MapPin,
   ChevronRight,
@@ -14,7 +15,8 @@ import {
   Layers,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  AlertTriangle
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Button } from '../components/common/Button';
@@ -30,6 +32,7 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { useDebounce } from '../hooks/useDebounce';
 
 export const GeographicAnalytics: React.FC = () => {
+  const navigate = useNavigate();
   // Navigation mode: 'district-drilldown' | 'all-pincodes'
   const [viewMode, setViewMode] = useState<'district-drilldown' | 'all-pincodes'>('district-drilldown');
 
@@ -426,38 +429,60 @@ export const GeographicAnalytics: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {sortedDistricts.map((d, idx) => (
-                      <tr
-                        key={idx}
-                        onClick={() => {
-                          setSelectedDistrict(d.district);
-                          setSelectedPincode(null);
-                        }}
-                        className="hover:bg-slate-50 cursor-pointer transition-colors group"
-                      >
-                        <td className="p-3.5 pl-6 font-semibold text-slate-900 flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
-                          <span className="group-hover:text-indigo-600 transition-colors">{d.district}</span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 ml-auto group-hover:text-indigo-600 transition-colors" />
-                        </td>
+                    {sortedDistricts.map((d, idx) => {
+                      const isUnknownDist = !d.district || d.district.toLowerCase().includes('unknown') || d.district.toLowerCase().includes('unassigned');
+                      return (
+                        <tr
+                          key={idx}
+                          onClick={() => {
+                            setSelectedDistrict(d.district);
+                            setSelectedPincode(null);
+                          }}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                        >
+                          <td className="p-3.5 pl-6 font-semibold text-slate-900 flex items-center gap-2">
+                            <MapPin className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
+                            {isUnknownDist ? (
+                              <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded border border-amber-300 font-semibold text-xs">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                {d.district}
+                              </span>
+                            ) : (
+                              <span className="group-hover:text-indigo-600 transition-colors">{d.district}</span>
+                            )}
+                            {isUnknownDist && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate('/unknown-locations?tab=unknown_district');
+                                }}
+                                className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded border border-amber-300 shadow-2xs"
+                                title="Resolve in Unknown Location Data session"
+                              >
+                                Fix Location
+                              </button>
+                            )}
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400 ml-auto group-hover:text-indigo-600 transition-colors" />
+                          </td>
 
-                        <td className="p-3.5 text-slate-600">
-                          {d.state || '-'}
-                        </td>
+                          <td className="p-3.5 text-slate-600">
+                            {d.state || '-'}
+                          </td>
 
-                        <td className="p-3.5 text-center font-semibold text-slate-800">
-                          {formatNumber(d.customer_count)}
-                        </td>
+                          <td className="p-3.5 text-center font-semibold text-slate-800">
+                            {formatNumber(d.customer_count)}
+                          </td>
 
-                        <td className="p-3.5 text-center text-slate-600">
-                          {formatNumber(d.total_orders)}
-                        </td>
+                          <td className="p-3.5 text-center text-slate-600">
+                            {formatNumber(d.total_orders)}
+                          </td>
 
-                        <td className="p-3.5 text-right font-bold text-emerald-600 pr-6 text-sm">
-                          {formatCurrency(d.total_revenue)}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="p-3.5 text-right font-bold text-emerald-600 pr-6 text-sm">
+                            {formatCurrency(d.total_revenue)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -535,37 +560,59 @@ export const GeographicAnalytics: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {sortedPincodes.map((pin, idx) => (
-                      <tr
-                        key={idx}
-                        onClick={() => setSelectedPincode(pin.pincode)}
-                        className="hover:bg-slate-50 cursor-pointer transition-colors group"
-                      >
-                        <td className="p-3.5 pl-6 font-mono font-bold text-slate-900 flex items-center gap-2">
-                          <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded border border-indigo-200 group-hover:border-indigo-400 transition-colors">
-                            {pin.pincode}
-                          </span>
-                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 ml-auto group-hover:text-indigo-600 transition-colors" />
-                        </td>
+                    {sortedPincodes.map((pin, idx) => {
+                      const isUnknownPin = !pin.pincode || pin.pincode.toLowerCase().includes('unknown') || pin.pincode === '000000';
+                      return (
+                        <tr
+                          key={idx}
+                          onClick={() => setSelectedPincode(pin.pincode)}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                        >
+                          <td className="p-3.5 pl-6 font-mono font-bold text-slate-900 flex items-center gap-2">
+                            {isUnknownPin ? (
+                              <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded border border-amber-300 font-semibold text-xs">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                {pin.pincode || 'Unknown PIN'}
+                              </span>
+                            ) : (
+                              <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded border border-indigo-200 group-hover:border-indigo-400 transition-colors">
+                                {pin.pincode}
+                              </span>
+                            )}
+                            {isUnknownPin && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate('/unknown-locations?tab=unknown_pincode');
+                                }}
+                                className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded border border-amber-300 shadow-2xs"
+                                title="Resolve in Unknown Location Data session"
+                              >
+                                Fix PIN
+                              </button>
+                            )}
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400 ml-auto group-hover:text-indigo-600 transition-colors" />
+                          </td>
 
-                        <td className="p-3.5 text-slate-700 font-medium">
-                          {pin.district}
-                          {pin.state ? <span className="text-slate-400 ml-1">({pin.state})</span> : null}
-                        </td>
+                          <td className="p-3.5 text-slate-700 font-medium">
+                            {pin.district}
+                            {pin.state ? <span className="text-slate-400 ml-1">({pin.state})</span> : null}
+                          </td>
 
-                        <td className="p-3.5 text-center font-semibold text-slate-800">
-                          {formatNumber(pin.customer_count)}
-                        </td>
+                          <td className="p-3.5 text-center font-semibold text-slate-800">
+                            {formatNumber(pin.customer_count)}
+                          </td>
 
-                        <td className="p-3.5 text-center text-slate-600">
-                          {formatNumber(pin.total_orders)}
-                        </td>
+                          <td className="p-3.5 text-center text-slate-600">
+                            {formatNumber(pin.total_orders)}
+                          </td>
 
-                        <td className="p-3.5 text-right font-bold text-emerald-600 pr-6 text-sm">
-                          {formatCurrency(pin.total_revenue)}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="p-3.5 text-right font-bold text-emerald-600 pr-6 text-sm">
+                            {formatCurrency(pin.total_revenue)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

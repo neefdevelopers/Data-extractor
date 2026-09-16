@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   GitFork,
   MapPin,
@@ -16,7 +17,8 @@ import {
   RotateCcw,
   CheckCircle2,
   Clock,
-  ExternalLink
+  ExternalLink,
+  AlertTriangle
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/common/Card';
@@ -42,6 +44,7 @@ import { formatCurrency, formatNumber, formatDateTime, getStatusBadgeColor, getR
 type DrilldownDimension = 'geographic' | 'product' | 'customer';
 
 export const DataDrilldown: React.FC = () => {
+  const navigate = useNavigate();
   const [dimension, setDimension] = useState<DrilldownDimension>('geographic');
 
   // Customer profile modal state
@@ -593,27 +596,47 @@ export const DataDrilldown: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {geoPincodesList.map((pin) => (
-                          <tr key={pin.pincode} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-3.5 pl-6 font-mono font-bold text-slate-900">
-                              <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
-                                {pin.pincode}
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-slate-700 font-medium">{pin.district}</td>
-                            <td className="p-3.5 text-center font-semibold text-slate-800">{formatNumber(pin.customer_count)}</td>
-                            <td className="p-3.5 text-center text-slate-600">{formatNumber(pin.total_orders)}</td>
-                            <td className="p-3.5 text-right font-bold text-emerald-600 text-sm">{formatCurrency(pin.total_revenue)}</td>
-                            <td className="p-3.5 text-right pr-6">
-                              <button
-                                onClick={() => setGeoPincode(pin.pincode)}
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md border border-indigo-200 shadow-2xs"
-                              >
-                                View Customers <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {geoPincodesList.map((pin) => {
+                          const isUnknownPin = !pin.pincode || pin.pincode.toLowerCase().includes('unknown') || pin.pincode === '000000';
+                          return (
+                            <tr key={pin.pincode} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-3.5 pl-6 font-mono font-bold text-slate-900">
+                                {isUnknownPin ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded border border-amber-300 font-semibold text-xs">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                    {pin.pincode || 'Unknown PIN'}
+                                  </span>
+                                ) : (
+                                  <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
+                                    {pin.pincode}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3.5 text-slate-700 font-medium">{pin.district}</td>
+                              <td className="p-3.5 text-center font-semibold text-slate-800">{formatNumber(pin.customer_count)}</td>
+                              <td className="p-3.5 text-center text-slate-600">{formatNumber(pin.total_orders)}</td>
+                              <td className="p-3.5 text-right font-bold text-emerald-600 text-sm">{formatCurrency(pin.total_revenue)}</td>
+                              <td className="p-3.5 text-right pr-6 space-x-2">
+                                {isUnknownPin && (
+                                  <button
+                                    onClick={() => navigate('/unknown-locations?tab=unknown_pincode')}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-300 shadow-2xs"
+                                    title="Open Unknown Location Data session to correct PIN codes"
+                                  >
+                                    <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                    Resolve PINs
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => setGeoPincode(pin.pincode)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md border border-indigo-200 shadow-2xs"
+                                >
+                                  View Customers <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -648,23 +671,45 @@ export const DataDrilldown: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {geoDistrictsList.map((d) => (
-                          <tr key={d.district} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-3.5 pl-6 font-bold text-slate-900">{d.district}</td>
-                            <td className="p-3.5 text-slate-600">{d.state || '-'}</td>
-                            <td className="p-3.5 text-center font-semibold text-slate-800">{formatNumber(d.customer_count)}</td>
-                            <td className="p-3.5 text-center text-slate-600">{formatNumber(d.total_orders)}</td>
-                            <td className="p-3.5 text-right font-bold text-emerald-600 text-sm">{formatCurrency(d.total_revenue)}</td>
-                            <td className="p-3.5 text-right pr-6">
-                              <button
-                                onClick={() => setGeoDistrict(d.district)}
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md border border-indigo-200 shadow-2xs"
-                              >
-                                Drill Down <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {geoDistrictsList.map((d) => {
+                          const isUnknownDist = !d.district || d.district.toLowerCase().includes('unknown') || d.district.toLowerCase().includes('unassigned');
+                          return (
+                            <tr key={d.district} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-3.5 pl-6 font-bold text-slate-900">
+                                {isUnknownDist ? (
+                                  <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded border border-amber-300 font-semibold text-xs">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                    {d.district}
+                                  </span>
+                                ) : (
+                                  d.district
+                                )}
+                              </td>
+                              <td className="p-3.5 text-slate-600">{d.state || '-'}</td>
+                              <td className="p-3.5 text-center font-semibold text-slate-800">{formatNumber(d.customer_count)}</td>
+                              <td className="p-3.5 text-center text-slate-600">{formatNumber(d.total_orders)}</td>
+                              <td className="p-3.5 text-right font-bold text-emerald-600 text-sm">{formatCurrency(d.total_revenue)}</td>
+                              <td className="p-3.5 text-right pr-6 space-x-2">
+                                {isUnknownDist && (
+                                  <button
+                                    onClick={() => navigate('/unknown-locations?tab=unknown_district')}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-300 shadow-2xs"
+                                    title="Open Unknown Location Data session to correct missing/unknown districts"
+                                  >
+                                    <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                    Resolve District
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => setGeoDistrict(d.district)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md border border-indigo-200 shadow-2xs"
+                                >
+                                  Drill Down <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

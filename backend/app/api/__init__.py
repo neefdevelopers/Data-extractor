@@ -9,6 +9,7 @@ from app.api.rfm import router as rfm_router
 from app.api.reports import router as reports_router
 from app.api.data_quality import router as data_quality_router
 from app.api.settings import router as settings_router
+from app.api.locations import router as locations_router
 
 __all__ = [
     "customers_router",
@@ -21,5 +22,7 @@ __all__ = [
     "rfm_router",
     "reports_router",
     "data_quality_router",
-    "settings_router"
+    "settings_router",
+    "locations_router"
 ]
+

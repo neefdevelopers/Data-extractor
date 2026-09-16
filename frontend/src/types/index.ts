@@ -313,3 +313,65 @@ export interface GlobalFilterState {
   search?: string;
   customerId?: number;
 }
+
+export interface UnknownLocationSummary {
+  unknown_pincode_count: number;
+  unknown_district_count: number;
+  both_unknown_count: number;
+  total_unresolved: number;
+}
+
+export interface UnknownLocationRecord {
+  id: number;
+  customer_id_str?: string;
+  customer_name: string;
+  contact_number?: string;
+  normalized_contact?: string;
+  full_address?: string;
+  pincode?: string;
+  post_office?: string;
+  district?: string;
+  state?: string;
+  total_orders: number;
+  total_spend: number;
+  missing_type: 'UNKNOWN_PINCODE' | 'UNKNOWN_DISTRICT' | 'BOTH_UNKNOWN';
+  created_at: string;
+}
+
+export interface LocationCorrectionRequest {
+  pincode?: string;
+  post_office?: string;
+  district?: string;
+  state?: string;
+  notes?: string;
+  source?: 'MANUAL' | 'POSTAL_API' | 'BULK_UPDATE';
+}
+
+export interface BulkLocationCorrectionRequest {
+  customer_ids: number[];
+  pincode?: string;
+  post_office?: string;
+  district?: string;
+  state?: string;
+  notes?: string;
+  source?: 'BULK_UPDATE' | 'POSTAL_API';
+}
+
+export interface LocationAuditLog {
+  id: number;
+  customer_id: number;
+  customer_name?: string;
+  previous_pincode?: string;
+  new_pincode?: string;
+  previous_district?: string;
+  new_district?: string;
+  previous_post_office?: string;
+  new_post_office?: string;
+  previous_state?: string;
+  new_state?: string;
+  correction_source: string;
+  changed_by: string;
+  notes?: string;
+  created_at: string;
+}
+

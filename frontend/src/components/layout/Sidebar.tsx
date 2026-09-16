@@ -10,6 +10,7 @@ import {
   UploadCloud,
   FileSpreadsheet,
   Settings,
+  MapPinOff,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { name: 'Customers CRM', path: '/customers', icon: Users },
   { name: 'Product Analytics', path: '/products', icon: Package },
   { name: 'Geographic Drilldown', path: '/geography', icon: MapPin },
+  { name: 'Unknown Locations', path: '/unknown-locations', icon: MapPinOff },
   { name: 'RFM Customer Segments', path: '/rfm', icon: Flame },
   { name: 'Import Wizard', path: '/uploads', icon: UploadCloud },
   { name: 'Reports & Exports', path: '/reports', icon: FileSpreadsheet },
