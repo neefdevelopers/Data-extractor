@@ -206,7 +206,6 @@ export const DataDrilldown: React.FC = () => {
     <div>
       <Header
         title="Multi-Dimensional Data Drill-Down"
-        subtitle="Granular hierarchical investigation across Geography, Products, and Customer Profiles"
       />
 
       <div className="p-8 max-w-7xl mx-auto space-y-6">

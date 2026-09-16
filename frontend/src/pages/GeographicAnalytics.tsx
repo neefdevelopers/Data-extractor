@@ -187,7 +187,6 @@ export const GeographicAnalytics: React.FC = () => {
     <div>
       <Header
         title="Geographic Intelligence & Postal Drilldown"
-        subtitle="Explore regional penetration: District → PIN Code → Customers → Order History"
         action={
           <Button
             size="sm"

@@ -71,7 +71,6 @@ export const DataQuality: React.FC = () => {
     <div>
       <Header
         title="Data Quality & Integrity Audit"
-        subtitle="Detect, monitor, and resolve data anomalies, invalid phones, postal conflicts, and duplicate entries"
         action={
           <Button
             size="sm"

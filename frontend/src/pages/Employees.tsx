@@ -65,7 +65,6 @@ export const Employees: React.FC = () => {
     <div>
       <Header
         title="Sales & Employee Analytics"
-        subtitle="Evaluate sales representative performance, revenue generation, and order volumes"
         action={
           <Button
             size="sm"

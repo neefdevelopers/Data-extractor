@@ -137,7 +137,6 @@ export const UnknownLocations: React.FC = () => {
     <div>
       <Header
         title="Unknown Location Data"
-        subtitle="Manage, enrich, and correct customer records with missing or unresolved postal locations"
         action={
           <div className="flex items-center gap-2">
             <Button

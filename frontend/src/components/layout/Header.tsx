@@ -9,14 +9,13 @@ interface HeaderProps {
   action?: React.ReactNode;
 }
 
-export const Header: React.FC<HeaderProps> = ({ title, subtitle, action }) => {
+export const Header: React.FC<HeaderProps> = ({ title, action }) => {
   const navigate = useNavigate();
 
   return (
     <header className="h-16 border-b border-slate-200/80 bg-white/90 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs">
       <div>
         <h1 className="text-lg font-bold text-slate-900 tracking-tight">{title}</h1>
-        {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
       </div>
 
       <div className="flex items-center gap-3">

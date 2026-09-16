@@ -173,7 +173,6 @@ export const Customers: React.FC = () => {
     <div>
       <Header
         title="Customer-wise Analytics Dashboard"
-        subtitle="Manage customer profiles, order histories, postal locations, RFM segmentation, and export reports"
         action={
           <div className="flex items-center gap-2">
             <Button

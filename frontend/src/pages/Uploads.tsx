@@ -110,7 +110,6 @@ export const Uploads: React.FC = () => {
     <div>
       <Header
         title="Spreadsheet Import Engine"
-        subtitle="Intelligent Excel & CSV ingestion with column detection, postal enrichment, and duplicate prevention"
       />
 
       <div className="p-8 max-w-7xl mx-auto space-y-8">

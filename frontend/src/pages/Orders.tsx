@@ -87,7 +87,6 @@ export const Orders: React.FC = () => {
     <div>
       <Header
         title="Orders Management"
-        subtitle="Track fulfilled, COD, prepaid, and returned orders with multi-item breakdowns"
         action={
           <Button
             size="sm"

@@ -67,7 +67,6 @@ export const Reports: React.FC = () => {
     <div>
       <Header
         title="Reports & Local Data Exports"
-        subtitle="Generate formatted Excel (.xlsx) and CSV spreadsheets directly from local PostgreSQL database"
       />
 
       <div className="p-8 max-w-7xl mx-auto space-y-6">

@@ -79,7 +79,6 @@ export const Products: React.FC = () => {
     <div>
       <Header
         title="Product Analytics & Catalog"
-        subtitle="Track total units sold, total orders, gross sales revenue, average revenue per order, and percentage contribution by SKU"
         action={
           <Button
             size="sm"

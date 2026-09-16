@@ -61,7 +61,6 @@ export const Settings: React.FC = () => {
     <div>
       <Header
         title="Platform & Revenue Settings"
-        subtitle="Configure centralized RevenueService eligibility rules, RFM algorithms, and local system parameters"
       />
 
       <div className="p-8 max-w-5xl mx-auto space-y-6">
@@ -79,7 +78,6 @@ export const Settings: React.FC = () => {
             {/* Revenue Eligibility Card */}
             <Card
               title="RevenueService Qualification Rules"
-              subtitle="Define which order statuses contribute to qualifying sales revenue, customer spend, and RFM scores"
             >
               <div className="space-y-4 pt-2">
                 {/* Policy Explanations */}
@@ -160,7 +158,6 @@ export const Settings: React.FC = () => {
             {/* RFM Model & Weights Configuration */}
             <Card
               title="RFM Segmentation Engine & Dimension Weights"
-              subtitle="Configure mathematical quintile weights and clustering parameters"
             >
               <div className="space-y-4 pt-2 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -197,7 +194,7 @@ export const Settings: React.FC = () => {
             </Card>
 
             {/* Local Environment & Database Status */}
-            <Card title="System Environment" subtitle="Local architecture parameters">
+            <Card title="System Environment">
               <div className="space-y-3 pt-2 text-xs">
                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="flex items-center gap-2.5">

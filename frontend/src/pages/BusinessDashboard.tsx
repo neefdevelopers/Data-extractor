@@ -63,7 +63,6 @@ export const BusinessDashboard: React.FC = () => {
     <div>
       <Header
         title="Executive Business Analytics"
-        subtitle="Real-time revenue performance, order volume, and customer lifetime KPIs"
       />
 
       <div className="p-8 max-w-7xl mx-auto space-y-6">
@@ -207,7 +206,6 @@ export const BusinessDashboard: React.FC = () => {
               <Card
                 className="lg:col-span-2"
                 title="Date-wise Revenue & Order Trend"
-                subtitle="Historical trajectory of daily revenue (₹), order counts, and daily AOV"
               >
                 <RevenueTrendChart data={kpis.revenue_trend} />
               </Card>
@@ -215,7 +213,6 @@ export const BusinessDashboard: React.FC = () => {
               {/* Payment Mode Donut (1 column) */}
               <Card
                 title="COD vs Prepaid Comparison"
-                subtitle="Payment mode distribution and AOV comparison"
               >
                 <PaymentModeChart data={kpis.payment_breakdown} metricType="revenue" />
               </Card>
@@ -228,7 +225,6 @@ export const BusinessDashboard: React.FC = () => {
                   <CreditCard className="w-4 h-4 text-indigo-600" />
                   COD vs Prepaid Performance Matrix
                 </h3>
-                <span className="text-xs text-slate-500">Comparative revenue, order share, and average basket sizes</span>
               </div>
 
               <div className="overflow-x-auto">
@@ -311,7 +307,6 @@ export const BusinessDashboard: React.FC = () => {
               <Card
                 className="lg:col-span-2"
                 title="Top Performing Geographic Districts"
-                subtitle="Highest revenue districts in India with active customer base"
                 action={
                   <button
                     onClick={() => navigate('/geography')}
@@ -325,7 +320,7 @@ export const BusinessDashboard: React.FC = () => {
               </Card>
 
               {/* Quick Summary Card */}
-              <Card title="Platform Directory Summary" subtitle="Audited database records">
+              <Card title="Platform Directory Summary">
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
                     <div className="flex items-center gap-2.5">
