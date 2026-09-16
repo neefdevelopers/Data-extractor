@@ -1,0 +1,320 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Flame,
+  RefreshCw,
+  Download,
+  Users,
+  Award,
+  AlertCircle,
+  TrendingUp,
+  Percent
+} from 'lucide-react';
+import { Header } from '../components/layout/Header';
+import { Button } from '../components/common/Button';
+import { Card } from '../components/common/Card';
+import { RfmMatrixChart } from '../components/charts/RfmMatrixChart';
+import { LoadingSkeleton } from '../components/common/LoadingSkeleton';
+import { ErrorState } from '../components/common/ErrorState';
+import { rfmApi } from '../services/rfmApi';
+import { reportApi } from '../services/reportApi';
+import { RFMDashboardData } from '../types';
+import { formatCurrency, formatNumber, getRfmSegmentBadgeColor } from '../utils/formatters';
+
+export const RfmAnalytics: React.FC = () => {
+  const [data, setData] = useState<RFMDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRfm = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await rfmApi.getDashboard();
+      setData(result);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load RFM analytics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRfm();
+  }, []);
+
+  const handleRecalculate = async () => {
+    setIsRecalculating(true);
+    try {
+      await rfmApi.recalculate();
+      await loadRfm();
+    } catch (err: any) {
+      alert('Recalculation error: ' + err.message);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
+  return (
+    <div>
+      <Header
+        title="RFM Customer Segmentation"
+        subtitle="Behavioral clustering based on Recency (R), Frequency (F), and Monetary Value (M)"
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<RefreshCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />}
+              isLoading={isRecalculating}
+              onClick={handleRecalculate}
+            >
+              Recalculate RFM
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<Download className="w-3.5 h-3.5" />}
+              onClick={() => reportApi.downloadRfm('xlsx')}
+            >
+              Export RFM
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="p-8 max-w-7xl mx-auto space-y-6">
+        {error ? (
+          <ErrorState message={error} onRetry={loadRfm} />
+        ) : loading && !data ? (
+          <LoadingSkeleton rows={6} />
+        ) : data ? (
+          <>
+            {/* Top KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <span className="text-xs text-slate-500 font-medium block mb-1">Customers with RFM Scores</span>
+                <span className="text-2xl font-bold text-indigo-600">{formatNumber(data.total_customers_with_rfm)}</span>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {data.customers_without_sufficient_data} without order history
+                </p>
+              </Card>
+
+              <Card>
+                <span className="text-xs text-slate-500 font-medium block mb-1">Average Recency</span>
+                <span className="text-2xl font-bold text-cyan-600">{data.avg_recency_days} days</span>
+                <p className="text-[11px] text-slate-400 mt-1">since latest customer purchase</p>
+              </Card>
+
+              <Card>
+                <span className="text-xs text-slate-500 font-medium block mb-1">Average Frequency</span>
+                <span className="text-2xl font-bold text-emerald-600">{data.avg_frequency} orders</span>
+                <p className="text-[11px] text-slate-400 mt-1">per qualified customer</p>
+              </Card>
+
+              <Card>
+                <span className="text-xs text-slate-500 font-medium block mb-1">Average Monetary Spend</span>
+                <span className="text-2xl font-bold text-amber-600">{formatCurrency(data.avg_monetary)}</span>
+                <p className="text-[11px] text-slate-400 mt-1">lifetime customer revenue</p>
+              </Card>
+            </div>
+
+            {/* Segment Distribution Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card
+                title="Customer Volume by Segment"
+                subtitle="Headcount distribution across 7 behavioral clusters"
+              >
+                <RfmMatrixChart segments={data.segments} metric="count" />
+              </Card>
+
+              <Card
+                title="Revenue Contribution by Segment"
+                subtitle="Gross sales generated by each RFM segment"
+              >
+                <RfmMatrixChart segments={data.segments} metric="revenue" />
+              </Card>
+            </div>
+
+            {/* Segment Breakdown Table */}
+            <div className="glass-card rounded-xl overflow-hidden shadow-xs">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-orange-500" />
+                  RFM Segment Profiles ({data.segments.length})
+                </h3>
+                <span className="text-xs text-slate-500">Behavioral clustering & customer value distribution</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="p-3.5 pl-6">Segment Name</th>
+                      <th className="p-3.5 text-center">Customers</th>
+                      <th className="p-3.5 text-center">Customer %</th>
+                      <th className="p-3.5 text-right">Total Revenue</th>
+                      <th className="p-3.5 text-right">Avg Monetary</th>
+                      <th className="p-3.5 text-center">Avg Frequency</th>
+                      <th className="p-3.5 text-right pr-6">Avg Recency</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.segments.map((seg, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3.5 pl-6">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getRfmSegmentBadgeColor(
+                              seg.segment_name
+                            )}`}
+                          >
+                            {seg.segment_name}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 text-center font-bold text-slate-800">
+                          {formatNumber(seg.customer_count)}
+                        </td>
+
+                        <td className="p-3.5 text-center text-slate-600">
+                          {seg.percentage.toFixed(1)}%
+                        </td>
+
+                        <td className="p-3.5 text-right font-bold text-emerald-600 text-sm">
+                          {formatCurrency(seg.total_revenue)}
+                        </td>
+
+                        <td className="p-3.5 text-right font-medium text-slate-800">
+                          {formatCurrency(seg.avg_monetary)}
+                        </td>
+
+                        <td className="p-3.5 text-center text-slate-600">
+                          {seg.avg_frequency.toFixed(1)}
+                        </td>
+
+                        <td className="p-3.5 text-right pr-6 text-slate-600">
+                          {seg.avg_recency_days.toFixed(0)} days
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* RFM Methodology & Segment Definitions */}
+            <Card
+              title="RFM Scoring Methodology & Segmentation Rules"
+              subtitle="Standard mathematical quintile distribution (1–5) and behavioral cluster mapping"
+            >
+              <div className="space-y-6 pt-2">
+                {/* 3 Core Dimensions */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-cyan-700 font-bold text-xs">
+                      <span className="w-5 h-5 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center text-[10px] font-bold">R</span>
+                      Recency (Score 1–5)
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Measures days elapsed since the customer's last qualifying order.
+                    </p>
+                    <div className="text-[10px] text-slate-600 font-mono bg-white border border-slate-200 p-2.5 rounded-lg shadow-2xs">
+                      Score 5 = Top 20% most recent<br />
+                      Score 1 = Bottom 20% longest dormant
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs">
+                      <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">F</span>
+                      Frequency (Score 1–5)
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Measures total count of lifetime qualifying orders placed.
+                    </p>
+                    <div className="text-[10px] text-slate-600 font-mono bg-white border border-slate-200 p-2.5 rounded-lg shadow-2xs">
+                      Score 5 = Top 20% highest order volume<br />
+                      Score 1 = Single order / lowest orders
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2 text-amber-700 font-bold text-xs">
+                      <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-bold">M</span>
+                      Monetary (Score 1–5)
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Measures cumulative net revenue / spend from qualified orders.
+                    </p>
+                    <div className="text-[10px] text-slate-600 font-mono bg-white border border-slate-200 p-2.5 rounded-lg shadow-2xs">
+                      Score 5 = Top 20% biggest spenders<br />
+                      Score 1 = Bottom 20% lowest spend
+                    </div>
+                  </div>
+                </div>
+
+                {/* 7 Segment Definitions Table */}
+                <div className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] uppercase font-semibold">
+                      <tr>
+                        <th className="p-3 pl-4">Segment</th>
+                        <th className="p-3">Score Criteria</th>
+                        <th className="p-3">Behavioral Profile</th>
+                        <th className="p-3 pr-4">Recommended Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700 text-[11px]">
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-emerald-700">🏆 Champions</td>
+                        <td className="p-3 font-mono text-slate-600">R ≥ 4, F ≥ 4, M ≥ 4</td>
+                        <td className="p-3 text-slate-700">Bought recently, buy often, and spend the most.</td>
+                        <td className="p-3 text-slate-500">Reward with VIP perks, early product drops, and ambassador programs.</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-blue-700">💎 Loyal Customers</td>
+                        <td className="p-3 font-mono text-slate-600">R ≥ 3, F ≥ 3, M ≥ 3</td>
+                        <td className="p-3 text-slate-700">Consistent repeat buyers with good lifetime spend.</td>
+                        <td className="p-3 text-slate-500">Upsell higher-value products, offer loyalty points and referral rewards.</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-indigo-700">⭐ Potential Loyalists</td>
+                        <td className="p-3 font-mono text-slate-600">R ≥ 4, F in [1, 2]</td>
+                        <td className="p-3 text-slate-700">Recent buyers with moderate order frequency.</td>
+                        <td className="p-3 text-slate-500">Engage with post-purchase onboarding and personalized recommendations.</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-purple-700">🌱 New Customers</td>
+                        <td className="p-3 font-mono text-slate-600">R ≥ 4, F = 1</td>
+                        <td className="p-3 text-slate-700">First-time buyers with recent initial purchase.</td>
+                        <td className="p-3 text-slate-500">Send welcome series, coupon for 2nd purchase to build habit.</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-amber-700">⚠️ At Risk</td>
+                        <td className="p-3 font-mono text-slate-600">R ≤ 2, (F ≥ 3 or M ≥ 3)</td>
+                        <td className="p-3 text-slate-700">Spent big money and bought often, but long time ago.</td>
+                        <td className="p-3 text-slate-500">Launch win-back reactivation campaigns, surveys, and special discounts.</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-orange-700">💤 Dormant Customers</td>
+                        <td className="p-3 font-mono text-slate-600">R = 3, F ≤ 2</td>
+                        <td className="p-3 text-slate-700">Moderate recency with low frequency and low spend.</td>
+                        <td className="p-3 text-slate-500">Re-engage with popular bestsellers and seasonal promotions.</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="p-3 pl-4 font-semibold text-rose-700">❌ Lost Customers</td>
+                        <td className="p-3 font-mono text-slate-600">R ≤ 2, F ≤ 2</td>
+                        <td className="p-3 text-slate-700">Lowest recency, frequency, and monetary spend.</td>
+                        <td className="p-3 text-slate-500">Low-cost re-engagement or clear list from expensive outbound SMS/calls.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </Card>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+};
