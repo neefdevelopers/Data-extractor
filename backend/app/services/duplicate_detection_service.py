@@ -1,7 +1,9 @@
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.models.customer import Customer
 from app.models.order import Order
+from app.utils.text_normalization import canonical_key, sql_ci_equals
 
 class DuplicateDetectionService:
     @staticmethod
@@ -23,14 +25,17 @@ class DuplicateDetectionService:
             if cust:
                 return cust, "PRIMARY_PHONE_MATCH"
 
-        # Secondary matching: Customer Name + Pincode
-        if customer_name and pincode and len(pincode) == 6:
-            cust = db.query(Customer).filter(
-                Customer.customer_name.ilike(customer_name.strip()),
-                Customer.pincode == pincode.strip()
-            ).first()
-            if cust:
-                return cust, "SECONDARY_NAME_PIN_MATCH"
+        # Secondary matching: Customer Name + Pincode (case-insensitive & trimmed)
+        if customer_name and pincode and len(pincode.strip()) == 6:
+            clean_name = canonical_key(customer_name)
+            clean_pin = pincode.strip()
+            if clean_name:
+                cust = db.query(Customer).filter(
+                    func.lower(func.trim(Customer.customer_name)) == clean_name,
+                    func.trim(Customer.pincode) == clean_pin
+                ).first()
+                if cust:
+                    return cust, "SECONDARY_NAME_PIN_MATCH"
 
         return None, "NO_MATCH"
 
@@ -38,4 +43,6 @@ class DuplicateDetectionService:
     def find_matching_order(db: Session, order_number: str) -> Optional[Order]:
         if not order_number:
             return None
-        return db.query(Order).filter(Order.order_number == str(order_number).strip()).first()
+        clean_ord = canonical_key(order_number)
+        return db.query(Order).filter(func.lower(func.trim(Order.order_number)) == clean_ord).first()
+

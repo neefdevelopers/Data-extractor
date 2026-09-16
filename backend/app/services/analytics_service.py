@@ -9,6 +9,7 @@ from app.models.product import Product
 from app.models.employee import Employee
 from app.models.order_item import OrderItem
 from app.services.revenue_service import RevenueService
+from app.utils.text_normalization import canonical_key, clean_display_text, ci_contains, ci_equals
 
 class AnalyticsService:
     @staticmethod
@@ -79,9 +80,11 @@ class AnalyticsService:
 
         # Order status filter: If user explicitly specifies order_status, filter by it; otherwise filter by revenue eligible statuses
         if order_status:
-            order_q = order_q.filter(Order.order_status.ilike(order_status.strip()))
+            clean_status = canonical_key(order_status)
+            order_q = order_q.filter(func.lower(func.trim(Order.order_status)) == clean_status)
         else:
-            order_q = order_q.filter(Order.order_status.in_(eligible_statuses))
+            eligible_norm = [canonical_key(s) for s in eligible_statuses]
+            order_q = order_q.filter(func.lower(func.trim(Order.order_status)).in_(eligible_norm))
 
         if dt_start and dt_end:
             order_q = order_q.filter(Order.order_date >= dt_start, Order.order_date <= dt_end)
@@ -90,24 +93,28 @@ class AnalyticsService:
         if customer_id:
             order_q = order_q.filter(Order.customer_id == customer_id)
         if payment_mode:
-            order_q = order_q.filter(Order.payment_mode.ilike(payment_mode.strip()))
+            clean_pay = canonical_key(payment_mode)
+            order_q = order_q.filter(func.lower(func.trim(Order.payment_mode)) == clean_pay)
         if district:
-            order_q = order_q.filter(Customer.district.ilike(f"%{district.strip()}%"))
+            clean_dist = canonical_key(district)
+            order_q = order_q.filter(func.lower(func.trim(Customer.district)).like(f"%{clean_dist}%"))
         if pincode:
-            order_q = order_q.filter(Customer.pincode == pincode.strip())
+            clean_pin = pincode.strip()
+            order_q = order_q.filter(func.trim(Customer.pincode) == clean_pin)
         if rfm_segment:
-            order_q = order_q.filter(Customer.rfm_segment == rfm_segment.strip())
+            clean_rfm = canonical_key(rfm_segment)
+            order_q = order_q.filter(func.lower(func.trim(Customer.rfm_segment)) == clean_rfm)
         if product_id:
             order_q = order_q.join(OrderItem, Order.id == OrderItem.order_id).filter(OrderItem.product_id == product_id).distinct()
         if search:
-            s = f"%{search.strip()}%"
+            s = f"%{canonical_key(search)}%"
             order_q = order_q.filter(
                 or_(
-                    Customer.customer_name.ilike(s),
-                    Customer.contact_number.ilike(s),
-                    Order.order_number.ilike(s),
-                    Customer.district.ilike(s),
-                    Customer.pincode.ilike(s)
+                    func.lower(func.trim(Customer.customer_name)).like(s),
+                    func.lower(func.trim(Customer.contact_number)).like(s),
+                    func.lower(func.trim(Order.order_number)).like(s),
+                    func.lower(func.trim(Customer.district)).like(s),
+                    func.lower(func.trim(Customer.pincode)).like(s)
                 )
             )
 
@@ -123,9 +130,9 @@ class AnalyticsService:
         total_customers = len(unique_customer_ids) if has_filter else db.query(Customer).count()
         total_products = db.query(Product).count()
 
-        # COD vs Prepaid breakdown
-        cod_orders = [o for o in orders if o.payment_mode == "COD"]
-        prepaid_orders = [o for o in orders if o.payment_mode == "PREPAID"]
+        # COD vs Prepaid breakdown (case-insensitive)
+        cod_orders = [o for o in orders if canonical_key(o.payment_mode) == "cod"]
+        prepaid_orders = [o for o in orders if canonical_key(o.payment_mode) in ["prepaid", "online", "upi", "card"]]
 
         cod_rev = sum(float(o.total_amount or 0.0) for o in cod_orders)
         prepaid_rev = sum(float(o.total_amount or 0.0) for o in prepaid_orders)
@@ -190,27 +197,33 @@ class AnalyticsService:
     @staticmethod
     def get_district_analytics(db: Session, search: Optional[str] = None) -> List[Dict[str, Any]]:
         eligible_statuses = RevenueService.get_eligible_statuses(db)
+        eligible_norm = {canonical_key(s) for s in eligible_statuses}
         customers = db.query(Customer).all()
         
+        # Group districts using canonical key while preserving clean display name
         district_data: Dict[str, Dict[str, Any]] = {}
         for c in customers:
-            dist = c.district or "Unassigned / Unknown"
-            if search and search.lower() not in dist.lower():
+            raw_dist = c.district or "Unassigned / Unknown"
+            d_key = canonical_key(raw_dist) or "unassigned"
+
+            if search and not ci_contains(raw_dist, search):
                 continue
-            if dist not in district_data:
-                district_data[dist] = {
-                    "district": dist,
-                    "state": c.state,
+
+            if d_key not in district_data:
+                display_name = clean_display_text(raw_dist, title_case=True) or "Unassigned / Unknown"
+                district_data[d_key] = {
+                    "district": display_name,
+                    "state": clean_display_text(c.state, title_case=True),
                     "customer_count": 0,
                     "total_orders": 0,
                     "total_revenue": 0.0
                 }
-            district_data[dist]["customer_count"] += 1
+            district_data[d_key]["customer_count"] += 1
             
             for o in c.orders:
-                if o.order_status in eligible_statuses:
-                    district_data[dist]["total_orders"] += 1
-                    district_data[dist]["total_revenue"] += float(o.total_amount or 0.0)
+                if canonical_key(o.order_status) in eligible_norm:
+                    district_data[d_key]["total_orders"] += 1
+                    district_data[d_key]["total_revenue"] += float(o.total_amount or 0.0)
 
         results = list(district_data.values())
         results.sort(key=lambda x: x["total_revenue"], reverse=True)
@@ -219,31 +232,39 @@ class AnalyticsService:
     @staticmethod
     def get_pincode_analytics(db: Session, district: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
         eligible_statuses = RevenueService.get_eligible_statuses(db)
+        eligible_norm = {canonical_key(s) for s in eligible_statuses}
         query = db.query(Customer)
         if district:
-            query = query.filter(Customer.district.ilike(f"%{district.strip()}%"))
+            clean_dist = canonical_key(district)
+            query = query.filter(func.lower(func.trim(Customer.district)).like(f"%{clean_dist}%"))
         
         customers = query.all()
         pin_data: Dict[str, Dict[str, Any]] = {}
         for c in customers:
-            pin = c.pincode or "Unknown"
-            if search and (search.lower() not in pin.lower() and (not c.district or search.lower() not in c.district.lower())):
-                continue
-            if pin not in pin_data:
-                pin_data[pin] = {
+            pin = (c.pincode or "Unknown").strip()
+            pin_key = canonical_key(pin) or "unknown"
+
+            if search:
+                if not (ci_contains(pin, search) or (c.district and ci_contains(c.district, search))):
+                    continue
+
+            if pin_key not in pin_data:
+                display_dist = clean_display_text(c.district, title_case=True) or "Unknown"
+                pin_data[pin_key] = {
                     "pincode": pin,
-                    "district": c.district or "Unknown",
-                    "state": c.state,
+                    "district": display_dist,
+                    "state": clean_display_text(c.state, title_case=True),
                     "customer_count": 0,
                     "total_orders": 0,
                     "total_revenue": 0.0
                 }
-            pin_data[pin]["customer_count"] += 1
+            pin_data[pin_key]["customer_count"] += 1
             for o in c.orders:
-                if o.order_status in eligible_statuses:
-                    pin_data[pin]["total_orders"] += 1
-                    pin_data[pin]["total_revenue"] += float(o.total_amount or 0.0)
+                if canonical_key(o.order_status) in eligible_norm:
+                    pin_data[pin_key]["total_orders"] += 1
+                    pin_data[pin_key]["total_revenue"] += float(o.total_amount or 0.0)
 
         results = list(pin_data.values())
         results.sort(key=lambda x: x["total_revenue"], reverse=True)
         return results
+

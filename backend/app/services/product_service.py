@@ -5,6 +5,7 @@ from app.models.product import Product
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.services.revenue_service import RevenueService
+from app.utils.text_normalization import canonical_key, clean_display_text, sql_ci_like, sql_ci_equals
 
 class ProductService:
     @staticmethod
@@ -26,19 +27,21 @@ class ProductService:
 
         query = db.query(Product)
         if search:
-            s = f"%{search.strip()}%"
+            s = f"%{canonical_key(search)}%"
             query = query.filter(
                 or_(
-                    Product.product_name.ilike(s),
-                    Product.sku.ilike(s),
-                    Product.category.ilike(s)
+                    func.lower(func.trim(Product.product_name)).like(s),
+                    func.lower(func.trim(Product.sku)).like(s),
+                    func.lower(func.trim(Product.category)).like(s)
                 )
             )
         if category:
-            query = query.filter(Product.category.ilike(f"%{category.strip()}%"))
+            c_key = canonical_key(category)
+            query = query.filter(func.lower(func.trim(Product.category)).like(f"%{c_key}%"))
 
         total = query.count()
         products = query.all()
+
 
         results = []
         for p in products:

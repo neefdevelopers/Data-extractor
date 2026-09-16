@@ -27,6 +27,7 @@ from app.utils.cleaning import (
     normalize_order_status,
     clean_address
 )
+from app.utils.text_normalization import canonical_key, clean_display_text, ci_equals
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "../uploads")
 
@@ -56,13 +57,14 @@ class ExcelImportService:
     def auto_detect_columns(file_columns: List[str]) -> Dict[str, Optional[str]]:
         """Maps target schema keys to source file header names"""
         detected: Dict[str, Optional[str]] = {}
-        cleaned_cols = {col.strip().lower().replace("_", " "): col for col in file_columns}
+        cleaned_cols = {canonical_key(col): col for col in file_columns}
 
         for target_field, synonyms in COLUMN_SYNONYMS.items():
             matched_header = None
             for syn in synonyms:
-                if syn in cleaned_cols:
-                    matched_header = cleaned_cols[syn]
+                syn_key = canonical_key(syn)
+                if syn_key in cleaned_cols:
+                    matched_header = cleaned_cols[syn_key]
                     break
             detected[target_field] = matched_header
 
@@ -192,33 +194,34 @@ class ExcelImportService:
                 return None
             return str(val).strip()
 
-        # In-Memory Pre-fetching to eliminate per-row DB roundtrips
+        # In-Memory Pre-fetching to eliminate per-row DB roundtrips (case-insensitive & trimmed keys)
         phone_cache: Dict[str, Customer] = {
             c.normalized_contact: c for c in db.query(Customer).filter(Customer.normalized_contact.isnot(None)).all()
         }
         name_pin_cache: Dict[Tuple[str, str], Customer] = {
-            (c.customer_name.strip().lower(), c.pincode.strip()): c
+            (canonical_key(c.customer_name), c.pincode.strip()): c
             for c in db.query(Customer).filter(Customer.customer_name.isnot(None), Customer.pincode.isnot(None)).all()
         }
         postal_cache: Dict[str, Optional[PostalMaster]] = {
-            p.pincode: p for p in db.query(PostalMaster).all()
+            p.pincode.strip(): p for p in db.query(PostalMaster).all()
         }
         employee_cache: Dict[str, Employee] = {
-            e.employee_name.strip().lower(): e for e in db.query(Employee).all()
+            canonical_key(e.employee_name): e for e in db.query(Employee).all()
         }
         product_sku_cache: Dict[str, Product] = {
-            p.sku.strip(): p for p in db.query(Product).filter(Product.sku.isnot(None)).all()
+            canonical_key(p.sku): p for p in db.query(Product).filter(Product.sku.isnot(None)).all()
         }
         product_name_cache: Dict[str, Product] = {
-            p.product_name.strip().lower(): p for p in db.query(Product).all()
+            canonical_key(p.product_name): p for p in db.query(Product).all()
         }
         order_cache: Dict[str, Order] = {
-            str(o.order_number).strip(): o for o in db.query(Order).all()
+            canonical_key(o.order_number): o for o in db.query(Order).all()
         }
         order_item_cache = {
             (oi.order_id, oi.product_id) for oi in db.query(OrderItem.order_id, OrderItem.product_id).all()
         }
         revenue_rules = RevenueService.get_revenue_rules(db)
+
 
         for index, row in df.iterrows():
             row_num = int(index) + 2  # Excel 1-based index with header at row 1
@@ -295,10 +298,16 @@ class ExcelImportService:
 
                 # 2. Customer Deduplication & Creation/Update
                 matched_cust: Optional[Customer] = None
+                cust_key = (canonical_key(cust_name), cleaned_pin) if (cust_name and cleaned_pin) else None
+
                 if norm_phone and norm_phone in phone_cache:
                     matched_cust = phone_cache[norm_phone]
-                elif cust_name and cleaned_pin and (cust_name.strip().lower(), cleaned_pin) in name_pin_cache:
-                    matched_cust = name_pin_cache[(cust_name.strip().lower(), cleaned_pin)]
+                elif cust_key and cust_key in name_pin_cache:
+                    matched_cust = name_pin_cache[cust_key]
+
+                clean_district = clean_display_text(raw_district, title_case=True)
+                clean_state = clean_display_text(raw_state, title_case=True)
+                clean_po_formatted = clean_display_text(raw_po, title_case=True)
 
                 if matched_cust:
                     customer = matched_cust
@@ -309,10 +318,12 @@ class ExcelImportService:
                         customer.full_address = cleaned_addr
                     if cleaned_pin and not customer.pincode:
                         customer.pincode = cleaned_pin
-                    if raw_district and not customer.district:
-                        customer.district = raw_district
-                    if raw_state and not customer.state:
-                        customer.state = raw_state
+                    if clean_district and not customer.district:
+                        customer.district = clean_district
+                    if clean_state and not customer.state:
+                        customer.state = clean_state
+                    if clean_po_formatted and not customer.post_office:
+                        customer.post_office = clean_po_formatted
                 else:
                     customer = Customer(
                         customer_name=cust_name or f"Customer {norm_phone or 'Unknown'}",
@@ -320,29 +331,29 @@ class ExcelImportService:
                         normalized_contact=norm_phone,
                         full_address=cleaned_addr,
                         pincode=cleaned_pin,
-                        post_office=raw_po,
-                        district=raw_district,
-                        state=raw_state
+                        post_office=clean_po_formatted,
+                        district=clean_district,
+                        state=clean_state
                     )
                     db.add(customer)
                     new_cust_count += 1
                     if norm_phone:
                         phone_cache[norm_phone] = customer
-                    if cust_name and cleaned_pin:
-                        name_pin_cache[(cust_name.strip().lower(), cleaned_pin)] = customer
+                    if cust_key:
+                        name_pin_cache[cust_key] = customer
 
                 # 3. Employee Handling
                 raw_emp = get_val(row_dict, "employee_name")
                 employee_obj = None
                 if raw_emp:
-                    emp_clean = raw_emp.strip()
-                    emp_key = emp_clean.lower()
+                    emp_display = clean_display_text(raw_emp, title_case=True) or raw_emp.strip()
+                    emp_key = canonical_key(raw_emp)
                     if emp_key in employee_cache:
                         employee_obj = employee_cache[emp_key]
                     else:
                         employee_obj = Employee(
-                            employee_name=emp_clean.title(),
-                            employee_code=f"EMP-{emp_clean[:3].upper()}-{len(employee_cache)+101}",
+                            employee_name=emp_display,
+                            employee_code=f"EMP-{emp_key[:3].upper()}-{len(employee_cache)+101}",
                             status="ACTIVE"
                         )
                         db.add(employee_obj)
@@ -357,9 +368,9 @@ class ExcelImportService:
 
                 product_obj = None
                 if raw_prod or raw_sku:
-                    sku_key = raw_sku.strip() if raw_sku else None
-                    prod_name = raw_prod.strip() if raw_prod else f"Product {raw_sku}"
-                    name_key = prod_name.lower()
+                    sku_key = canonical_key(raw_sku) if raw_sku else None
+                    prod_name = clean_display_text(raw_prod) or (f"Product {raw_sku.strip()}" if raw_sku else "Unknown Product")
+                    name_key = canonical_key(prod_name)
 
                     if sku_key and sku_key in product_sku_cache:
                         product_obj = product_sku_cache[sku_key]
@@ -375,8 +386,8 @@ class ExcelImportService:
 
                         product_obj = Product(
                             product_name=prod_name,
-                            sku=sku_key,
-                            category=raw_cat or "General",
+                            sku=clean_display_text(raw_sku),
+                            category=clean_display_text(raw_cat, title_case=True) or "General",
                             price=price_val
                         )
                         db.add(product_obj)

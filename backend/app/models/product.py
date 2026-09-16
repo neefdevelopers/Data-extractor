@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, Index, func
 from sqlalchemy.orm import relationship
 from app.database.session import Base
 
@@ -17,3 +17,9 @@ class Product(Base):
 
     # Relationships
     order_items = relationship("OrderItem", back_populates="product")
+
+    __table_args__ = (
+        Index('idx_product_name_ci', func.lower(func.trim(product_name))),
+        Index('idx_product_sku_ci', func.lower(func.trim(sku))),
+    )
+

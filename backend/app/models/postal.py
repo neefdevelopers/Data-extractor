@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, func
 from sqlalchemy.orm import relationship
 from app.database.session import Base
 
@@ -20,6 +20,11 @@ class PostalMaster(Base):
     # 1 PIN -> Multiple Post Offices
     offices = relationship("PostalOffice", back_populates="master", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index('idx_postal_district_ci', func.lower(func.trim(district))),
+        Index('idx_postal_state_ci', func.lower(func.trim(state))),
+    )
+
 class PostalOffice(Base):
     __tablename__ = "postal_offices"
 
@@ -32,3 +37,8 @@ class PostalOffice(Base):
     state = Column(String(255), nullable=True)
 
     master = relationship("PostalMaster", back_populates="offices")
+
+    __table_args__ = (
+        Index('idx_postal_office_ci', func.lower(func.trim(office_name))),
+    )
+

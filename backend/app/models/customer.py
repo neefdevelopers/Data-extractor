@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Index, func
 from sqlalchemy.orm import relationship
 from app.database.session import Base
 
@@ -40,4 +40,8 @@ class Customer(Base):
         Index('idx_cust_pin', 'pincode'),
         Index('idx_cust_district', 'district'),
         Index('idx_cust_segment', 'rfm_segment'),
+        Index('idx_cust_name_ci', func.lower(func.trim(customer_name))),
+        Index('idx_cust_district_ci', func.lower(func.trim(district))),
+        Index('idx_cust_po_ci', func.lower(func.trim(post_office))),
     )
+

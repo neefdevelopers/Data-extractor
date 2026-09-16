@@ -4,6 +4,7 @@ from sqlalchemy import func, desc, asc
 from app.models.employee import Employee
 from app.models.order import Order
 from app.services.revenue_service import RevenueService
+from app.utils.text_normalization import canonical_key, clean_display_text, sql_ci_like, sql_ci_equals
 
 class EmployeeService:
     @staticmethod
@@ -20,15 +21,18 @@ class EmployeeService:
 
         query = db.query(Employee)
         if search:
+            s = f"%{canonical_key(search)}%"
             query = query.filter(
-                (Employee.employee_name.ilike(f"%{search.strip()}%")) |
-                (Employee.employee_code.ilike(f"%{search.strip()}%"))
+                (func.lower(func.trim(Employee.employee_name)).like(s)) |
+                (func.lower(func.trim(Employee.employee_code)).like(s))
             )
         if status:
-            query = query.filter(Employee.status == status.strip().upper())
+            clean_status = canonical_key(status)
+            query = query.filter(func.lower(func.trim(Employee.status)) == clean_status)
 
         total = query.count()
         employees = query.all()
+
 
         results = []
         for emp in employees:

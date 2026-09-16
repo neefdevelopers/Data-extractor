@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models.postal import PostalMaster, PostalOffice
 from app.models.data_quality import DataQualityIssue
 from app.utils.postal_api import fetch_postal_info_from_api
+from app.utils.text_normalization import canonical_key, clean_display_text, ci_equals, sql_ci_like
 
 class PostalService:
     @staticmethod
@@ -13,29 +14,30 @@ class PostalService:
         client_po: Optional[str] = None,
         auto_commit: bool = True
     ) -> Optional[PostalMaster]:
-        if not pincode or len(pincode) != 6 or not pincode.isdigit():
+        if not pincode or len(pincode.strip()) != 6 or not pincode.strip().isdigit():
             return None
+        pin = pincode.strip()
 
         # Check local database cache first
-        postal = db.query(PostalMaster).filter(PostalMaster.pincode == pincode).first()
+        postal = db.query(PostalMaster).filter(PostalMaster.pincode == pin).first()
         if postal:
             PostalService._check_conflict(postal, client_district, client_po, db, auto_commit=auto_commit)
             return postal
 
         # Fetch from India Post API
-        api_data = fetch_postal_info_from_api(pincode)
+        api_data = fetch_postal_info_from_api(pin)
         if not api_data:
             return None
 
-        # Save to local Postal Master
+        # Save to local Postal Master with clean display formatting
         postal = PostalMaster(
-            pincode=pincode,
-            district=api_data.get("district"),
-            state=api_data.get("state"),
-            region=api_data.get("region"),
-            division=api_data.get("division"),
-            circle=api_data.get("circle"),
-            country=api_data.get("country", "India")
+            pincode=pin,
+            district=clean_display_text(api_data.get("district"), title_case=True),
+            state=clean_display_text(api_data.get("state"), title_case=True),
+            region=clean_display_text(api_data.get("region"), title_case=True),
+            division=clean_display_text(api_data.get("division"), title_case=True),
+            circle=clean_display_text(api_data.get("circle"), title_case=True),
+            country=clean_display_text(api_data.get("country", "India"), title_case=True) or "India"
         )
         db.add(postal)
         db.flush()
@@ -43,12 +45,12 @@ class PostalService:
         # Save all associated post offices (1:N)
         for po in api_data.get("offices", []):
             office = PostalOffice(
-                pincode=pincode,
-                office_name=po.get("office_name"),
+                pincode=pin,
+                office_name=clean_display_text(po.get("office_name"), title_case=True) or "",
                 office_type=po.get("office_type"),
                 delivery_status=po.get("delivery_status"),
-                district=po.get("district"),
-                state=po.get("state")
+                district=clean_display_text(po.get("district"), title_case=True),
+                state=clean_display_text(po.get("state"), title_case=True)
             )
             db.add(office)
         
@@ -71,7 +73,7 @@ class PostalService:
     ):
         """Creates a Data Quality warning if imported Excel values conflict with official postal database"""
         if client_district and postal.district:
-            if client_district.strip().lower() != postal.district.strip().lower():
+            if not ci_equals(client_district, postal.district):
                 existing = db.query(DataQualityIssue).filter(
                     DataQualityIssue.entity_type == "POSTAL",
                     DataQualityIssue.entity_id == postal.pincode,
@@ -95,6 +97,9 @@ class PostalService:
 
     @staticmethod
     def search_post_offices(query: str, db: Session, limit: int = 20) -> List[PostalOffice]:
+        from sqlalchemy import func
+        clean_q = canonical_key(query)
         return db.query(PostalOffice).filter(
-            PostalOffice.office_name.ilike(f"%{query}%")
+            func.lower(func.trim(PostalOffice.office_name)).like(f"%{clean_q}%")
         ).limit(limit).all()
+

@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Index, func
 from sqlalchemy.orm import relationship
 from app.database.session import Base
 
@@ -16,3 +16,8 @@ class Employee(Base):
 
     # Relationships
     orders = relationship("Order", back_populates="employee")
+
+    __table_args__ = (
+        Index('idx_emp_name_ci', func.lower(func.trim(employee_name))),
+    )
+

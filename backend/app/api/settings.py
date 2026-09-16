@@ -58,3 +58,10 @@ def update_revenue_rules(rules: RevenueSettings, db: Session = Depends(get_db)):
     RFMService.recalculate_all_rfm(db)
     
     return MessageResponse(success=True, message="Revenue qualification rules updated and analytics recalculated.")
+
+@router.post("/merge-duplicates")
+def merge_database_duplicates(db: Session = Depends(get_db)):
+    from app.services.deduplication_service import DeduplicationService
+    result = DeduplicationService.merge_all_duplicates(db)
+    return result
+

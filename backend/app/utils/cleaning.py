@@ -1,11 +1,12 @@
 import re
 from typing import Optional, Tuple
+from app.utils.text_normalization import canonical_key, clean_display_text
 
 def normalize_name(name: Optional[str]) -> Optional[str]:
-    if not name or str(name).strip().lower() in ["nan", "none", "null", ""]:
-        return None
-    cleaned = " ".join(str(name).strip().split())
-    return cleaned.title()
+    return clean_display_text(name, title_case=True)
+
+def normalize_text_field(val: Optional[str], title_case: bool = False) -> Optional[str]:
+    return clean_display_text(val, title_case=title_case)
 
 def normalize_mobile(phone: Optional[str]) -> Tuple[Optional[str], bool]:
     """
@@ -64,28 +65,27 @@ def normalize_pincode(pin: Optional[str]) -> Tuple[Optional[str], bool]:
 def normalize_payment_mode(mode: Optional[str]) -> str:
     if not mode or str(mode).strip().lower() in ["nan", "none", "null", ""]:
         return "COD"
-    val = str(mode).strip().upper()
-    if "PRE" in val or "ONLINE" in val or "CARD" in val or "UPI" in val or "NET" in val or "PAID" in val:
+    val = canonical_key(mode)
+    if "pre" in val or "online" in val or "card" in val or "upi" in val or "net" in val or "paid" in val:
         return "PREPAID"
     return "COD"
 
 def normalize_order_status(status: Optional[str]) -> str:
     if not status or str(status).strip().lower() in ["nan", "none", "null", ""]:
         return "DELIVERED"
-    val = str(status).strip().upper()
-    if "DELIVER" in val or "DISPATCH" in val or "COMPLET" in val or "FULFILL" in val:
+    val = canonical_key(status)
+    if "deliver" in val or "dispatch" in val or "complet" in val or "fulfill" in val:
         return "DELIVERED"
-    if "CANCEL" in val:
+    if "cancel" in val:
         return "CANCELLED"
-    if "RETURN" in val or "RTO" in val:
+    if "return" in val or "rto" in val:
         return "RETURNED"
-    if "REFUND" in val:
+    if "refund" in val:
         return "REFUNDED"
-    if "PEND" in val or "HOLD" in val or "PROCESS" in val:
+    if "pend" in val or "hold" in val or "process" in val:
         return "PENDING"
     return "DELIVERED"
 
 def clean_address(addr: Optional[str]) -> Optional[str]:
-    if not addr or str(addr).strip().lower() in ["nan", "none", "null", ""]:
-        return None
-    return " ".join(str(addr).strip().split())
+    return clean_display_text(addr)
+

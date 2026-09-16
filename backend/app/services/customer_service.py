@@ -7,6 +7,8 @@ from app.models.rfm import RFMScore
 from app.schemas.customer import CustomerCreate, CustomerUpdate, CustomerDetail, CustomerRFMInfo
 from app.utils.cleaning import normalize_name, normalize_mobile, normalize_pincode, clean_address
 
+from app.utils.text_normalization import canonical_key, clean_display_text, sql_ci_like, sql_ci_equals
+
 class CustomerService:
     @staticmethod
     def get_formatted_clipboard_text(cust: Customer) -> str:
@@ -53,27 +55,31 @@ class CustomerService:
         query = db.query(Customer)
 
         if search:
-            s = f"%{search.strip()}%"
+            s = f"%{canonical_key(search)}%"
             query = query.filter(
                 or_(
-                    Customer.customer_name.ilike(s),
-                    Customer.contact_number.ilike(s),
-                    Customer.normalized_contact.ilike(s),
-                    Customer.pincode.ilike(s),
-                    Customer.district.ilike(s),
-                    Customer.post_office.ilike(s),
-                    Customer.full_address.ilike(s)
+                    func.lower(func.trim(Customer.customer_name)).like(s),
+                    func.lower(func.trim(Customer.contact_number)).like(s),
+                    func.lower(func.trim(Customer.normalized_contact)).like(s),
+                    func.lower(func.trim(Customer.pincode)).like(s),
+                    func.lower(func.trim(Customer.district)).like(s),
+                    func.lower(func.trim(Customer.post_office)).like(s),
+                    func.lower(func.trim(Customer.full_address)).like(s)
                 )
             )
 
         if district:
-            query = query.filter(Customer.district.ilike(f"%{district.strip()}%"))
+            clean_dist = canonical_key(district)
+            query = query.filter(func.lower(func.trim(Customer.district)).like(f"%{clean_dist}%"))
         if post_office:
-            query = query.filter(Customer.post_office.ilike(f"%{post_office.strip()}%"))
+            clean_po = canonical_key(post_office)
+            query = query.filter(func.lower(func.trim(Customer.post_office)).like(f"%{clean_po}%"))
         if pincode:
-            query = query.filter(Customer.pincode == pincode.strip())
+            clean_pin = pincode.strip()
+            query = query.filter(func.trim(Customer.pincode) == clean_pin)
         if rfm_segment:
-            query = query.filter(Customer.rfm_segment == rfm_segment.strip())
+            clean_rfm = canonical_key(rfm_segment)
+            query = query.filter(func.lower(func.trim(Customer.rfm_segment)) == clean_rfm)
         if min_orders is not None:
             query = query.filter(Customer.total_orders >= min_orders)
         if max_orders is not None:
@@ -82,6 +88,7 @@ class CustomerService:
             query = query.filter(Customer.total_spend >= min_spend)
         if max_spend is not None:
             query = query.filter(Customer.total_spend <= max_spend)
+
 
         total = query.count()
 
