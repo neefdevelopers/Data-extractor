@@ -75,13 +75,24 @@ class DeduplicationService:
                         {"customer_id": primary.id}, synchronize_session=False
                     )
 
+                    from app.services.district_service import DistrictService
+
                     # Merge non-empty customer profile fields
                     if not primary.full_address and duplicate.full_address:
                         primary.full_address = duplicate.full_address
                     if not primary.pincode and duplicate.pincode:
                         primary.pincode = duplicate.pincode
-                    if not primary.district and duplicate.district:
-                        primary.district = clean_display_text(duplicate.district, title_case=True)
+                    
+                    dist_to_resolve = primary.district or duplicate.district
+                    if dist_to_resolve:
+                        dist_obj, c_name, c_state = DistrictService.get_or_create_district(dist_to_resolve, state_hint=primary.state or duplicate.state, db=db)
+                        if dist_obj:
+                            primary.district_id = dist_obj.id
+                            primary.district = dist_obj.canonical_name
+                            primary.state = dist_obj.state or primary.state
+                        elif c_name:
+                            primary.district = c_name
+                    
                     if not primary.state and duplicate.state:
                         primary.state = clean_display_text(duplicate.state, title_case=True)
                     if not primary.post_office and duplicate.post_office:
@@ -123,8 +134,18 @@ class DeduplicationService:
                         primary.normalized_contact = duplicate.normalized_contact
                     if not primary.full_address and duplicate.full_address:
                         primary.full_address = duplicate.full_address
-                    if not primary.district and duplicate.district:
-                        primary.district = clean_display_text(duplicate.district, title_case=True)
+                    
+                    dist_to_resolve = primary.district or duplicate.district
+                    if dist_to_resolve:
+                        from app.services.district_service import DistrictService
+                        dist_obj, c_name, c_state = DistrictService.get_or_create_district(dist_to_resolve, state_hint=primary.state or duplicate.state, db=db)
+                        if dist_obj:
+                            primary.district_id = dist_obj.id
+                            primary.district = dist_obj.canonical_name
+                            primary.state = dist_obj.state or primary.state
+                        elif c_name:
+                            primary.district = c_name
+
                     if not primary.state and duplicate.state:
                         primary.state = clean_display_text(duplicate.state, title_case=True)
 

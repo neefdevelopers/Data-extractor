@@ -10,8 +10,16 @@ class CustomerBase(BaseModel):
     full_address: Optional[str] = None
     pincode: Optional[str] = None
     post_office: Optional[str] = None
+    source_district: Optional[str] = None
+    source_file_name: Optional[str] = None
+    source_row_number: Optional[int] = None
+    raw_row_data: Optional[str] = None
+    district_id: Optional[int] = None
     district: Optional[str] = None
     state: Optional[str] = None
+    district_resolution_source: Optional[str] = "UNRESOLVED"
+    district_status: Optional[str] = "UNRESOLVED"
+    district_mismatch: Optional[bool] = False
 
 class CustomerCreate(CustomerBase):
     pass
@@ -22,8 +30,16 @@ class CustomerUpdate(BaseModel):
     full_address: Optional[str] = None
     pincode: Optional[str] = None
     post_office: Optional[str] = None
+    source_district: Optional[str] = None
+    source_file_name: Optional[str] = None
+    source_row_number: Optional[int] = None
+    raw_row_data: Optional[str] = None
+    district_id: Optional[int] = None
     district: Optional[str] = None
     state: Optional[str] = None
+    district_resolution_source: Optional[str] = None
+    district_status: Optional[str] = None
+    district_mismatch: Optional[bool] = None
 
 class CustomerRFMInfo(BaseModel):
     recency_days: int

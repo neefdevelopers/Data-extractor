@@ -1,4 +1,5 @@
 import re
+import json
 import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.orm import Session
@@ -7,6 +8,7 @@ from app.models.customer import Customer
 from app.models.location_audit import LocationCorrectionAudit
 from app.models.postal import PostalMaster
 from app.services.postal_service import PostalService
+from app.services.district_resolution_service import DistrictResolutionService
 from app.schemas.location import (
     UnknownLocationSummary,
     UnknownLocationRecord,
@@ -18,21 +20,22 @@ from app.schemas.location import (
 )
 from app.utils.text_normalization import canonical_key, clean_display_text, ci_contains
 from app.utils.cleaning import normalize_pincode
-from app.utils.district_normalization import normalize_district_name
+from app.utils.district_normalization import match_kerala_canonical_district, normalize_district_name
 
 def sql_is_unknown_pin():
     return or_(
         Customer.pincode.is_(None),
         func.trim(Customer.pincode) == "",
-        func.lower(func.trim(Customer.pincode)).in_(["unknown", "unassigned", "n/a", "null", "none", "nan", "000000"]),
+        func.lower(func.trim(Customer.pincode)).in_(["unknown", "unassigned", "n/a", "null", "none", "nan", "000000", "nil"]),
         func.length(func.trim(Customer.pincode)) != 6
     )
 
 def sql_is_unknown_district():
     return or_(
+        and_(Customer.district_id.is_(None), or_(Customer.district.is_(None), func.trim(Customer.district) == "")),
         Customer.district.is_(None),
         func.trim(Customer.district) == "",
-        func.lower(func.trim(Customer.district)).in_(["unknown", "unassigned", "unassigned / unknown", "n/a", "null", "none", "nan", "unknown district"]),
+        func.lower(func.trim(Customer.district)).in_(["unknown", "unassigned", "unassigned / unknown", "n/a", "null", "none", "nan", "unknown district", "nil"]),
         func.lower(func.trim(Customer.district)).like("%unknown%"),
         func.lower(func.trim(Customer.district)).like("%unassigned%")
     )
@@ -41,16 +44,18 @@ def is_unknown_pin(pin: Optional[str]) -> bool:
     if not pin:
         return True
     s = str(pin).strip().lower()
-    if s in ["", "unknown", "unassigned", "n/a", "null", "none", "nan", "000000"]:
+    if s in ["", "unknown", "unassigned", "n/a", "null", "none", "nan", "000000", "nil"]:
         return True
     digits = re.sub(r"\D", "", s)
     return len(digits) != 6
 
-def is_unknown_district(dist: Optional[str]) -> bool:
+def is_unknown_district(dist: Optional[str], dist_id: Optional[int] = None) -> bool:
+    if dist_id is not None:
+        return False
     if not dist:
         return True
     s = str(dist).strip().lower()
-    if s in ["", "unknown", "unassigned", "n/a", "null", "none", "nan", "unknown district", "unassigned / unknown"]:
+    if s in ["", "unknown", "unassigned", "n/a", "null", "none", "nan", "unknown district", "unassigned / unknown", "nil"]:
         return True
     if "unknown" in s or "unassigned" in s:
         return True
@@ -133,14 +138,38 @@ class LocationService:
         records = []
         for c in customers:
             u_pin = is_unknown_pin(c.pincode)
-            u_dist = is_unknown_district(c.district)
+            u_dist = is_unknown_district(c.district, c.district_id)
 
             if u_pin and u_dist:
                 m_type = "BOTH_UNKNOWN"
+                reason = "Both 6-digit Pincode and Kerala District are missing or unverified"
             elif u_pin:
                 m_type = "UNKNOWN_PINCODE"
+                reason = "Invalid or missing 6-digit Pincode"
             else:
                 m_type = "UNKNOWN_DISTRICT"
+                reason = "District is missing or does not match any of the 14 Kerala canonical districts"
+
+            raw_data_dict = None
+            if getattr(c, "raw_row_data", None):
+                try:
+                    raw_data_dict = json.loads(c.raw_row_data)
+                except Exception:
+                    raw_data_dict = None
+
+            if not raw_data_dict:
+                # Provide a structured fallback dictionary of customer fields
+                raw_data_dict = {
+                    "Customer Name": c.customer_name or "",
+                    "Contact Number": c.contact_number or c.normalized_contact or "",
+                    "Full Address": c.full_address or "",
+                    "Pincode": c.pincode or "",
+                    "Post Office": c.post_office or "",
+                    "Uploaded District": getattr(c, "source_district", None) or c.district or "",
+                    "State": c.state or "Kerala",
+                    "Total Orders": str(c.total_orders or 0),
+                    "Total Spend": f"₹{c.total_spend:,.2f}" if c.total_spend else "₹0.00"
+                }
 
             records.append(
                 UnknownLocationRecord(
@@ -152,11 +181,19 @@ class LocationService:
                     full_address=c.full_address,
                     pincode=c.pincode if not u_pin else None,
                     post_office=c.post_office,
-                    district=clean_display_text(c.district, title_case=True) if not u_dist else None,
-                    state=clean_display_text(c.state, title_case=True),
+                    source_district=getattr(c, "source_district", None),
+                    district_id=c.district_id,
+                    district=c.district if not u_dist else None,
+                    state=c.state or "Kerala",
+                    district_resolution_source=getattr(c, "district_resolution_source", "UNRESOLVED") or "UNRESOLVED",
+                    district_status=getattr(c, "district_status", "UNRESOLVED") or "UNRESOLVED",
+                    unresolved_reason=reason,
                     total_orders=c.total_orders,
                     total_spend=c.total_spend,
                     missing_type=m_type,
+                    source_file_name=getattr(c, "source_file_name", None) or "Manual / System Record",
+                    source_row_number=getattr(c, "source_row_number", None),
+                    raw_row_data=raw_data_dict,
                     created_at=c.created_at
                 )
             )
@@ -187,35 +224,65 @@ class LocationService:
         prev_po = cust.post_office
         prev_state = cust.state
 
-        # Clean and normalize new values
-        clean_pin, pin_valid = normalize_pincode(req.pincode) if req.pincode else (None, False)
-        norm_dist, inferred_st = normalize_district_name(req.district, state_hint=req.state) if req.district else (None, req.state)
-        clean_dist = norm_dist or clean_display_text(req.district, title_case=True)
-        clean_po = clean_display_text(req.post_office, title_case=True)
-        clean_st = clean_display_text(inferred_st or req.state, title_case=True)
+        target_pin = req.pincode if req.pincode is not None else cust.pincode
+        target_dist = req.district if req.district is not None else cust.district
+        target_po = req.post_office if req.post_office is not None else cust.post_office
+        target_state = req.state if req.state is not None else cust.state
 
-        if req.pincode:
-            if not pin_valid and req.pincode.strip():
-                raise ValueError(f"Invalid PIN code '{req.pincode}'. Must be a 6-digit number.")
-            cust.pincode = clean_pin
+        # Validate pincode if entered
+        clean_pin, pin_valid = normalize_pincode(target_pin) if target_pin else (None, False)
+        if target_pin and target_pin.strip() and not pin_valid:
+            raise ValueError(f"Invalid PIN code '{target_pin}'. Must be a 6-digit number.")
 
-        if req.district is not None:
-            cust.district = clean_dist
+        # Resolve via centralized DistrictResolutionService
+        clean_po = clean_display_text(target_po, title_case=True) if target_po else None
+        res = DistrictResolutionService.resolve_district(
+            raw_district=target_dist,
+            pincode=clean_pin,
+            source_post_office=clean_po,
+            address_hint=cust.full_address,
+            state_hint=target_state,
+            db=db,
+            allow_postal_lookup=True
+        )
 
-        if req.post_office is not None:
-            cust.post_office = clean_po
+        cust.pincode = clean_pin if clean_pin else None
+        cust.post_office = clean_po
+        if target_dist and not getattr(cust, "source_district", None):
+            cust.source_district = target_dist
 
-        if req.state is not None:
-            cust.state = clean_st
+        if res.is_resolved:
+            cust.district_id = res.district_id
+            cust.district = res.canonical_name
+            cust.state = res.state or target_state or "Kerala"
+            cust.district_resolution_source = res.resolution_source
+            cust.district_status = res.district_status
+            cust.district_mismatch = res.district_mismatch
+        else:
+            cust.district_id = None
+            cust.district = None
+            cust.state = target_state or "Kerala"
+            cust.district_resolution_source = "UNRESOLVED"
+            cust.district_status = "UNRESOLVED"
+            cust.district_mismatch = False
 
-        # If valid PIN entered and district/state not explicitly provided, enrich from postal master
-        if clean_pin and pin_valid and (not cust.district or not cust.state):
-            postal = db.query(PostalMaster).filter(PostalMaster.pincode == clean_pin).first()
-            if postal:
-                if not cust.district and postal.district:
-                    cust.district = postal.district
-                if not cust.state and postal.state:
-                    cust.state = postal.state
+        if res.district_mismatch and target_dist:
+            from app.models.data_quality import DataQualityIssue
+            issue = db.query(DataQualityIssue).filter(
+                DataQualityIssue.entity_type == "CUSTOMER",
+                DataQualityIssue.entity_id == str(cust.id),
+                DataQualityIssue.issue_type == "DISTRICT_MISMATCH"
+            ).first()
+            if not issue:
+                db.add(DataQualityIssue(
+                    entity_type="CUSTOMER",
+                    entity_id=str(cust.id),
+                    field_name="district",
+                    issue_type="DISTRICT_MISMATCH",
+                    raw_value=target_dist,
+                    message=f"Customer ID #{cust.id}: {res.mismatch_message}",
+                    suggested_fix=f"Verified as '{res.canonical_name}' via Pincode {clean_pin}"
+                ))
 
         # Create Audit Log
         audit = LocationCorrectionAudit(
@@ -248,13 +315,20 @@ class LocationService:
             return {"updated_count": 0, "message": "No customers selected."}
 
         clean_pin, pin_valid = normalize_pincode(req.pincode) if req.pincode else (None, False)
-        norm_dist, inferred_st = normalize_district_name(req.district, state_hint=req.state) if req.district else (None, req.state)
-        clean_dist = norm_dist or clean_display_text(req.district, title_case=True)
-        clean_po = clean_display_text(req.post_office, title_case=True)
-        clean_st = clean_display_text(inferred_st or req.state, title_case=True)
-
-        if req.pincode and not pin_valid:
+        if req.pincode and req.pincode.strip() and not pin_valid:
             raise ValueError(f"Invalid PIN code '{req.pincode}'. Must be a 6-digit number.")
+
+        res = None
+        if req.district or (clean_pin and pin_valid):
+            res = DistrictResolutionService.resolve_district(
+                raw_district=req.district,
+                pincode=clean_pin,
+                state_hint=req.state,
+                db=db,
+                allow_postal_lookup=True
+            )
+
+        clean_po = clean_display_text(req.post_office, title_case=True) if req.post_office else None
 
         customers = db.query(Customer).filter(Customer.id.in_(req.customer_ids)).all()
         updated_count = 0
@@ -267,21 +341,34 @@ class LocationService:
 
             has_change = False
 
-            if req.pincode and pin_valid:
-                cust.pincode = clean_pin
+            if req.pincode is not None:
+                cust.pincode = clean_pin if clean_pin else None
                 has_change = True
 
-            if req.district:
-                cust.district = clean_dist
-                has_change = True
-
-            if req.post_office:
+            if req.post_office is not None:
                 cust.post_office = clean_po
                 has_change = True
 
-            if req.state:
-                cust.state = clean_st
+            if req.state is not None:
+                cust.state = req.state or "Kerala"
                 has_change = True
+
+            if req.district is not None or (clean_pin and pin_valid):
+                if res and res.is_resolved:
+                    cust.district_id = res.district_id
+                    cust.district = res.canonical_name
+                    cust.state = res.state or cust.state or "Kerala"
+                    cust.district_resolution_source = res.resolution_source if res.resolution_source == "PINCODE" else "BULK_UPDATE"
+                    cust.district_status = res.district_status
+                    cust.district_mismatch = res.district_mismatch
+                    has_change = True
+                elif req.district is not None:
+                    cust.district_id = None
+                    cust.district = None
+                    cust.district_resolution_source = "UNRESOLVED"
+                    cust.district_status = "UNRESOLVED"
+                    cust.district_mismatch = False
+                    has_change = True
 
             if has_change:
                 audit = LocationCorrectionAudit(

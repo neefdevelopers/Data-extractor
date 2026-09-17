@@ -20,7 +20,11 @@ export const GeoDistributionChart: React.FC<GeoDistributionChartProps> = ({
   districts,
   limit = 8,
 }) => {
-  if (!districts || districts.length === 0) {
+  const activeDistricts = (districts || []).filter(
+    (d) => d.district && d.district.trim() !== '' && (d.total_revenue > 0 || d.total_orders > 0)
+  );
+
+  if (!activeDistricts || activeDistricts.length === 0) {
     return (
       <div className="flex items-center justify-center h-56 text-xs text-slate-500">
         No geographic data available.
@@ -28,7 +32,7 @@ export const GeoDistributionChart: React.FC<GeoDistributionChartProps> = ({
     );
   }
 
-  const chartData = districts.slice(0, limit).map((d) => ({
+  const chartData = activeDistricts.slice(0, limit).map((d) => ({
     name: d.district,
     revenue: d.total_revenue,
     orders: d.total_orders,

@@ -364,7 +364,20 @@ export const UnknownLocations: React.FC = () => {
                             <span className="text-slate-500 text-[11px] block">
                               {r.contact_number || r.normalized_contact || 'No Contact'}
                             </span>
-                            <span className="text-[10px] text-slate-400 font-mono">ID #{r.id}</span>
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              <span className="text-[10px] text-slate-400 font-mono">ID #{r.id}</span>
+                              {r.source_file_name && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 truncate max-w-[140px]" title={r.source_file_name}>
+                                  <FileSpreadsheet className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                                  <span className="truncate">{r.source_file_name}</span>
+                                </span>
+                              )}
+                              {r.source_row_number && (
+                                <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  #{r.source_row_number}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
@@ -381,11 +394,23 @@ export const UnknownLocations: React.FC = () => {
 
                         <td className="p-3">
                           {r.district ? (
-                            <span className="font-semibold text-slate-900">{r.district}</span>
+                            <div className="space-y-1">
+                              <span className="font-semibold text-slate-900 block">{r.district}</span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                {r.district_resolution_source || 'RESOLVED'}
+                              </span>
+                            </div>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                              Unknown District
-                            </span>
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                Unknown District
+                              </span>
+                              {r.unresolved_reason && (
+                                <p className="text-[10px] text-slate-500 max-w-[180px] leading-tight" title={r.unresolved_reason}>
+                                  {r.unresolved_reason}
+                                </p>
+                              )}
+                            </div>
                           )}
                         </td>
 

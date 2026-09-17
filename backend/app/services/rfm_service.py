@@ -57,75 +57,59 @@ class RFMService:
     @staticmethod
     def recalculate_all_rfm(db: Session) -> Dict[str, Any]:
         """
-        Calculates R, F, M for all customers from actual qualifying orders in PostgreSQL.
-        Assigns 1-5 scores and updates both RFMScore and Customer summary tables.
+        Calculates R, F, M for all customers using optimized SQL group aggregations.
+        Assigns 1-5 scores and updates both RFMScore and Customer summary tables in bulk.
         """
         eligible_statuses = RevenueService.get_eligible_statuses(db)
         now = datetime.datetime.utcnow()
 
-        # Query all customers with their qualifying orders (eager loaded in single query)
-        customers = db.query(Customer).options(joinedload(Customer.orders)).all()
-        if not customers:
-            return {"total_processed": 0}
+        # 1. Fast SQL aggregation of eligible orders grouped by customer_id
+        order_aggs = db.query(
+            Order.customer_id,
+            func.min(Order.order_date).label("first_order"),
+            func.max(Order.order_date).label("last_order"),
+            func.count(Order.id).label("total_orders"),
+            func.sum(func.coalesce(Order.total_amount, 0.0)).label("total_spend")
+        ).filter(
+            Order.order_status.in_(eligible_statuses),
+            Order.order_date.isnot(None),
+            Order.customer_id.isnot(None)
+        ).group_by(Order.customer_id).all()
+
+        if not order_aggs:
+            return {"total_processed": db.query(Customer).count(), "rfm_calculated": 0}
 
         records = []
-        for cust in customers:
-            qualifying_orders = [
-                o for o in cust.orders 
-                if o.order_status in eligible_statuses and o.order_date is not None
-            ]
-            
-            if not qualifying_orders:
-                # Customer has no eligible orders yet
-                cust.total_orders = 0
-                cust.total_spend = 0.0
-                cust.average_order_value = 0.0
-                cust.first_order_date = None
-                cust.last_order_date = None
-                cust.rfm_score = "111"
-                cust.rfm_segment = "New Customers"
-                continue
+        for agg in order_aggs:
+            cid = agg.customer_id
+            first_order = agg.first_order
+            last_order = agg.last_order
+            total_orders = int(agg.total_orders or 0)
+            total_spend = float(agg.total_spend or 0.0)
+            aov = (total_spend / total_orders) if total_orders > 0 else 0.0
+            recency_days = max(0, (now - last_order).days) if last_order else 0
 
-            order_dates = [o.order_date for o in qualifying_orders]
-            first_order = min(order_dates)
-            last_order = max(order_dates)
-            total_orders = len(qualifying_orders)
-            total_spend = sum(float(o.total_amount or 0.0) for o in qualifying_orders)
-            aov = total_spend / total_orders if total_orders > 0 else 0.0
-
-            # Update cached customer aggregates
-            cust.first_order_date = first_order
-            cust.last_order_date = last_order
-            cust.total_orders = total_orders
-            cust.total_spend = total_spend
-            cust.average_order_value = aov
-
-            recency_days = max(0, (now - last_order).days)
             records.append({
-                "customer_id": cust.id,
+                "customer_id": cid,
+                "first_order_date": first_order,
+                "last_order_date": last_order,
+                "total_orders": total_orders,
+                "total_spend": total_spend,
+                "average_order_value": aov,
                 "recency_days": recency_days,
                 "frequency": total_orders,
                 "monetary_value": total_spend
             })
 
-        if not records:
-            db.commit()
-            return {"total_processed": len(customers), "rfm_calculated": 0}
-
         df = pd.DataFrame(records)
 
         # Calculate quintiles (1-5 scores)
-        # Recency: lower recency_days = higher score (5 is best)
-        # Frequency: higher frequency = higher score (5 is best)
-        # Monetary: higher monetary_value = higher score (5 is best)
         try:
             if len(df) >= 5:
-                # Use qcut with duplicates handling
                 df['r_score'] = pd.qcut(df['recency_days'].rank(method='first'), q=5, labels=[5, 4, 3, 2, 1]).astype(int)
                 df['f_score'] = pd.qcut(df['frequency'].rank(method='first'), q=5, labels=[1, 2, 3, 4, 5]).astype(int)
                 df['m_score'] = pd.qcut(df['monetary_value'].rank(method='first'), q=5, labels=[1, 2, 3, 4, 5]).astype(int)
             else:
-                # For small test datasets (< 5 customers), apply linear/threshold scoring
                 df['r_score'] = df['recency_days'].apply(lambda x: 5 if x < 30 else (4 if x < 60 else (3 if x < 90 else (2 if x < 180 else 1))))
                 df['f_score'] = df['frequency'].apply(lambda x: 5 if x >= 5 else (4 if x >= 4 else (3 if x >= 3 else (2 if x >= 2 else 1))))
                 df['m_score'] = df['monetary_value'].apply(lambda x: 5 if x >= 5000 else (4 if x >= 3000 else (3 if x >= 1500 else (2 if x >= 500 else 1))))
@@ -135,9 +119,8 @@ class RFMService:
             df['m_score'] = 3
 
         existing_rfms = {r.customer_id: r for r in db.query(RFMScore).all()}
-        cust_map = {c.id: c for c in customers}
+        customer_updates = []
 
-        # Update RFM scores and segments
         for _, row in df.iterrows():
             cid = int(row['customer_id'])
             r = int(row['r_score'])
@@ -162,14 +145,23 @@ class RFMService:
             rfm_entry.rfm_score = rfm_str
             rfm_entry.segment = segment
 
-            # Update Customer summary
-            cust = cust_map.get(cid)
-            if cust:
-                cust.rfm_score = rfm_str
-                cust.rfm_segment = segment
+            customer_updates.append({
+                "id": cid,
+                "first_order_date": row['first_order_date'],
+                "last_order_date": row['last_order_date'],
+                "total_orders": int(row['total_orders']),
+                "total_spend": float(row['total_spend']),
+                "average_order_value": float(row['average_order_value']),
+                "rfm_score": rfm_str,
+                "rfm_segment": segment
+            })
 
+        if customer_updates:
+            db.bulk_update_mappings(Customer, customer_updates)
+
+        total_cust_count = db.query(Customer).count()
         db.commit()
-        return {"total_processed": len(customers), "rfm_calculated": len(records)}
+        return {"total_processed": total_cust_count, "rfm_calculated": len(records)}
 
     @staticmethod
     def recalculate_single_customer(customer_id: int, db: Session):

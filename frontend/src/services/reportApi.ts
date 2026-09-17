@@ -48,8 +48,43 @@ export const reportApi = {
     window.open(`${BASE_URL}/reports/rfm?format=${format}`, '_blank');
   },
 
-  downloadGeographic: (format: 'xlsx' | 'csv' = 'xlsx') => {
-    window.open(`${BASE_URL}/reports/geographic?format=${format}`, '_blank');
+  downloadGeographic: (format: 'xlsx' | 'csv' = 'xlsx', filters?: Record<string, any>) => {
+    const params = new URLSearchParams();
+    params.append('format', format);
+    if (filters) {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') {
+          params.append(k, String(v));
+        }
+      });
+    }
+    window.open(`${BASE_URL}/reports/geographic?${params.toString()}`, '_blank');
+  },
+
+  downloadPincodes: (format: 'xlsx' | 'csv' = 'xlsx', filters?: Record<string, any>) => {
+    const params = new URLSearchParams();
+    params.append('format', format);
+    if (filters) {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') {
+          params.append(k, String(v));
+        }
+      });
+    }
+    window.open(`${BASE_URL}/reports/pincodes?${params.toString()}`, '_blank');
+  },
+
+  downloadPostOffices: (format: 'xlsx' | 'csv' = 'xlsx', filters?: Record<string, any>) => {
+    const params = new URLSearchParams();
+    params.append('format', format);
+    if (filters) {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') {
+          params.append(k, String(v));
+        }
+      });
+    }
+    window.open(`${BASE_URL}/reports/post-offices?${params.toString()}`, '_blank');
   },
 
   downloadProducts: (format: 'xlsx' | 'csv' = 'xlsx') => {

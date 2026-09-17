@@ -11,7 +11,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 @router.get("", response_model=PaginatedResponse[ProductOut])
 def list_products(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(100, ge=1, le=1000),
     search: Optional[str] = None,
     category: Optional[str] = None,
     sort_by: str = "total_revenue",

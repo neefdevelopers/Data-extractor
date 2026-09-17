@@ -19,11 +19,19 @@ class UnknownLocationRecord(BaseModel):
     full_address: Optional[str] = None
     pincode: Optional[str] = None
     post_office: Optional[str] = None
+    source_district: Optional[str] = None
+    district_id: Optional[int] = None
     district: Optional[str] = None
     state: Optional[str] = None
+    district_resolution_source: Optional[str] = "UNRESOLVED"
+    district_status: Optional[str] = "UNRESOLVED"
+    unresolved_reason: Optional[str] = None
     total_orders: int = 0
     total_spend: float = 0.0
     missing_type: str  # UNKNOWN_PINCODE, UNKNOWN_DISTRICT, BOTH_UNKNOWN
+    source_file_name: Optional[str] = None
+    source_row_number: Optional[int] = None
+    raw_row_data: Optional[dict] = None
     created_at: datetime.datetime
 
 class LocationCorrectionRequest(BaseModel):

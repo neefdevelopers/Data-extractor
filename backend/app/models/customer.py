@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Index, func
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Index, Boolean, func
 from sqlalchemy.orm import relationship
 from app.database.session import Base
 
@@ -14,9 +14,18 @@ class Customer(Base):
     full_address = Column(Text, nullable=True)
     pincode = Column(String(10), nullable=True, index=True)
     post_office = Column(String(255), nullable=True)
+    source_district = Column(String(255), nullable=True)  # Original raw/uploaded district
+    source_file_name = Column(String(255), nullable=True, index=True)  # Source document/file name
+    source_row_number = Column(Integer, nullable=True)  # Raw row number in spreadsheet
+    raw_row_data = Column(Text, nullable=True)  # Full JSON of raw uploaded row
     district_id = Column(Integer, ForeignKey("district_master.id", ondelete="SET NULL"), nullable=True, index=True)
-    district = Column(String(255), nullable=True, index=True)
+    district = Column(String(255), nullable=True, index=True)  # Canonical district name
     state = Column(String(255), nullable=True)
+    
+    # District Resolution Tracking (Auditing & Confidence)
+    district_resolution_source = Column(String(50), default="UNRESOLVED", nullable=True, index=True)  # PINCODE, DISTRICT_DIRECT_MATCH, DISTRICT_ALIAS, DISTRICT_FALLBACK, MANUAL_CONFIRMATION, UNRESOLVED
+    district_status = Column(String(50), default="UNRESOLVED", nullable=True, index=True)  # RESOLVED, NEEDS_CONFIRMATION, UNRESOLVED
+    district_mismatch = Column(Boolean, default=False, nullable=True, index=True)
     
     # Aggregated metrics (recalculated from order data)
     first_order_date = Column(DateTime, nullable=True)
@@ -42,9 +51,10 @@ class Customer(Base):
         Index('idx_cust_pin', 'pincode'),
         Index('idx_cust_district', 'district'),
         Index('idx_cust_district_id', 'district_id'),
+        Index('idx_cust_dist_res_src', 'district_resolution_source'),
+        Index('idx_cust_dist_status', 'district_status'),
         Index('idx_cust_segment', 'rfm_segment'),
         Index('idx_cust_name_ci', func.lower(func.trim(customer_name))),
         Index('idx_cust_district_ci', func.lower(func.trim(district))),
         Index('idx_cust_po_ci', func.lower(func.trim(post_office))),
     )
-

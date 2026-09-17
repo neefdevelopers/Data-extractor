@@ -52,6 +52,7 @@ class ProductAnalyticsItem(BaseModel):
     revenue_contribution_pct: float
 
 class DistrictAnalyticsItem(BaseModel):
+    district_id: Optional[int] = None
     district: str
     state: Optional[str] = None
     customer_count: int
@@ -65,6 +66,21 @@ class PincodeAnalyticsItem(BaseModel):
     customer_count: int
     total_orders: int
     total_revenue: float
+
+class PostOfficeAnalyticsItem(BaseModel):
+    post_office: str
+    pincode: Optional[str] = None
+    district: Optional[str] = None
+    state: Optional[str] = None
+    customer_count: int
+    total_orders: int
+    total_revenue: float
+
+class GeographicSummaryKPIs(BaseModel):
+    total_orders: int
+    total_revenue: float
+    total_customers: int
+    average_order_value: float
 
 class EmployeeAnalyticsItem(BaseModel):
     employee_id: int

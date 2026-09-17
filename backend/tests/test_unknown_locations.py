@@ -174,3 +174,37 @@ def test_bulk_location_correction(db_session):
     # Check audits
     audits = LocationService.get_audit_history(db_session)
     assert audits.total == 2
+
+def test_unknown_locations_raw_row_details(db_session):
+    import json
+    raw_dict = {
+        "Customer Name": "Fathima Suhara",
+        "Mobile Number": "9895123456",
+        "Address": "Kizhakkethil House, Calicut Road",
+        "Pincode": "676505",
+        "District": "Malappuram",
+        "Order ID": "ORD-9988",
+        "Order Amount": "4500.00"
+    }
+    c = Customer(
+        customer_name="Fathima Suhara",
+        contact_number="9895123456",
+        pincode=None,  # Missing PIN in record
+        district="Unknown",
+        source_file_name="DHAARA_OCTOBER_ORDERS.xlsx",
+        source_row_number=42,
+        raw_row_data=json.dumps(raw_dict)
+    )
+    db_session.add(c)
+    db_session.commit()
+
+    records = LocationService.get_unknown_records(db_session, filter_type="all")
+    assert records.total == 1
+    rec = records.items[0]
+    assert rec.source_file_name == "DHAARA_OCTOBER_ORDERS.xlsx"
+    assert rec.source_row_number == 42
+    assert rec.raw_row_data is not None
+    assert rec.raw_row_data["Customer Name"] == "Fathima Suhara"
+    assert rec.raw_row_data["Order ID"] == "ORD-9988"
+    assert rec.raw_row_data["Order Amount"] == "4500.00"
+

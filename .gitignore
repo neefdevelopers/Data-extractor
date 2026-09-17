@@ -17,6 +17,8 @@ dist-ssr/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # Uploads & Exports (keep directory, ignore contents)

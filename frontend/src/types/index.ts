@@ -7,8 +7,16 @@ export interface Customer {
   full_address?: string;
   pincode?: string;
   post_office?: string;
+  source_district?: string;
+  source_file_name?: string;
+  source_row_number?: number;
+  raw_row_data?: string;
+  district_id?: number;
   district?: string;
   state?: string;
+  district_resolution_source?: string;
+  district_status?: string;
+  district_mismatch?: boolean;
   first_order_date?: string;
   last_order_date?: string;
   total_orders: number;
@@ -19,6 +27,23 @@ export interface Customer {
   created_at: string;
   updated_at: string;
 }
+
+export const KERALA_CANONICAL_DISTRICTS = [
+  'Alappuzha',
+  'Ernakulam',
+  'Idukki',
+  'Kannur',
+  'Kasaragod',
+  'Kollam',
+  'Kottayam',
+  'Kozhikode',
+  'Malappuram',
+  'Palakkad',
+  'Pathanamthitta',
+  'Thiruvananthapuram',
+  'Thrissur',
+  'Wayanad'
+] as const;
 
 export interface CustomerRFMInfo {
   recency_days: number;
@@ -166,7 +191,15 @@ export interface BusinessDashboardKPIs {
   payment_breakdown: PaymentModeBreakdown[];
 }
 
+export interface GeographicSummaryKPIs {
+  total_orders: number;
+  total_revenue: number;
+  total_customers: number;
+  average_order_value: number;
+}
+
 export interface DistrictAnalyticsItem {
+  district_id?: number;
   district: string;
   state?: string;
   customer_count: number;
@@ -175,6 +208,16 @@ export interface DistrictAnalyticsItem {
 }
 
 export interface PincodeAnalyticsItem {
+  pincode: string;
+  district: string;
+  state?: string;
+  customer_count: number;
+  total_orders: number;
+  total_revenue: number;
+}
+
+export interface PostOfficeAnalyticsItem {
+  post_office: string;
   pincode: string;
   district: string;
   state?: string;
@@ -330,11 +373,19 @@ export interface UnknownLocationRecord {
   full_address?: string;
   pincode?: string;
   post_office?: string;
+  source_district?: string;
+  district_id?: number;
   district?: string;
   state?: string;
+  district_resolution_source?: string;
+  district_status?: string;
+  unresolved_reason?: string;
   total_orders: number;
   total_spend: number;
   missing_type: 'UNKNOWN_PINCODE' | 'UNKNOWN_DISTRICT' | 'BOTH_UNKNOWN';
+  source_file_name?: string;
+  source_row_number?: number;
+  raw_row_data?: Record<string, any>;
   created_at: string;
 }
 

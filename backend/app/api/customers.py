@@ -47,6 +47,35 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
     return cust
 
+@router.post("", response_model=CustomerOut)
+def create_customer(
+    data: CustomerCreate,
+    db: Session = Depends(get_db)
+):
+    """Creates a new customer with automatic Pincode-first district resolution"""
+    try:
+        return CustomerService.create_customer(db, data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/{customer_id}", response_model=CustomerDetail)
+def update_customer(
+    customer_id: int,
+    data: CustomerUpdate,
+    db: Session = Depends(get_db)
+):
+    """Updates customer details with automatic Pincode-first district resolution"""
+    try:
+        CustomerService.update_customer(db, customer_id, data)
+        updated_cust = CustomerService.get_customer_by_id(db, customer_id)
+        if not updated_cust:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return updated_cust
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{customer_id}/orders", response_model=PaginatedResponse[OrderOut])
 def get_customer_orders(
     customer_id: int,
@@ -63,3 +92,4 @@ def get_customer_orders(
         page_size=page_size,
         total_pages=total_pages
     )
+

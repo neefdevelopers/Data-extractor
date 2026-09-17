@@ -44,7 +44,7 @@ export const BusinessDashboard: React.FC = () => {
     try {
       const [kpiData, districtData] = await Promise.all([
         analyticsApi.getDashboardKPIs(filters),
-        analyticsApi.getDistricts(),
+        analyticsApi.getGeographicDistricts(filters),
       ]);
       setKpis(kpiData);
       setDistricts(districtData);

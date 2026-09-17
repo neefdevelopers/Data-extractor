@@ -6,13 +6,14 @@ def canonical_key(val: Optional[Any]) -> str:
     """
     Normalizes a string for internal comparison, deduplication, hash mapping, and grouping.
     - Strips leading/trailing whitespace
+    - Replaces underscores and hyphens with spaces
     - Collapses multiple internal whitespace characters into a single space
     - Converts to lowercase
     - Returns empty string for None/Null-like values
     """
     if val is None:
         return ""
-    s = str(val).strip()
+    s = str(val).strip().replace("_", " ").replace("-", " ")
     if s.lower() in ["nan", "none", "null", "undefined", ""]:
         return ""
     return " ".join(s.split()).lower()

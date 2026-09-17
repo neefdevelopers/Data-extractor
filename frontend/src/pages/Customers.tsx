@@ -16,7 +16,9 @@ import {
   Layers,
   MapPin,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/common/Card';
@@ -481,9 +483,21 @@ export const Customers: React.FC = () => {
                       </td>
 
                       <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium border border-slate-200/80">
-                          {c.district || '-'}
-                        </span>
+                        <div className="space-y-0.5">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-medium border border-slate-200/80 inline-block">
+                            {c.district || '-'}
+                          </span>
+                          {c.district_resolution_source === 'PINCODE' && (
+                            <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-semibold">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Pincode
+                            </span>
+                          )}
+                          {c.district_mismatch && (
+                            <span className="text-[10px] text-amber-600 flex items-center gap-0.5 font-medium" title={`Uploaded district was '${c.source_district}'`}>
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Mismatch
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="p-3.5">

@@ -11,7 +11,9 @@ import {
   ShieldCheck,
   Tag,
   CreditCard,
-  Layers
+  Layers,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { CopyCustomerButton } from './CopyCustomerButton';
@@ -228,7 +230,21 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-500 block mb-0.5">District:</span>
-                      <span className="font-semibold text-slate-800">{customer.district || '-'}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-800">{customer.district || '-'}</span>
+                        {customer.district_resolution_source === 'PINCODE' && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            Resolved from Pincode
+                          </span>
+                        )}
+                      </div>
+                      {customer.district_mismatch && customer.source_district && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 mt-1" title={`Uploaded district was '${customer.source_district}'`}>
+                          <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                          Uploaded as {customer.source_district}
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="text-slate-500 block mb-0.5">State:</span>

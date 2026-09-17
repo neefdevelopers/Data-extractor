@@ -10,7 +10,7 @@ router = APIRouter(prefix="/reports", tags=["Reports & Exports"])
 
 @router.get("/customers")
 def export_customers(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
     search: Optional[str] = None,
     district: Optional[str] = None,
     post_office: Optional[str] = None,
@@ -45,7 +45,7 @@ def export_customers(
 
 @router.get("/orders")
 def export_orders(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
     payment_mode: Optional[str] = None,
     order_status: Optional[str] = None,
     start_date: Optional[str] = None,
@@ -59,7 +59,7 @@ def export_orders(
 
 @router.get("/rfm")
 def export_rfm(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
     db: Session = Depends(get_db)
 ):
     filepath = ExportService.export_rfm(db, format_type=format)
@@ -69,17 +69,120 @@ def export_rfm(
 
 @router.get("/geographic")
 def export_geographic(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    preset: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    product_id: Optional[int] = None,
+    employee_id: Optional[int] = None,
+    payment_mode: Optional[str] = None,
+    order_status: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    filepath = ExportService.export_geographic(db, format_type=format)
+    filepath = ExportService.export_geographic(
+        db,
+        format_type=format,
+        preset=preset,
+        start_date=start_date,
+        end_date=end_date,
+        product_id=product_id,
+        employee_id=employee_id,
+        payment_mode=payment_mode,
+        order_status=order_status,
+        customer_id=customer_id,
+        search=search
+    )
+    filename = os.path.basename(filepath)
+    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if format == "xlsx" else "text/csv"
+    return FileResponse(path=filepath, filename=filename, media_type=media_type)
+
+@router.get("/pincodes")
+def export_pincodes(
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    preset: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    product_id: Optional[int] = None,
+    district: Optional[str] = None,
+    district_id: Optional[int] = None,
+    employee_id: Optional[int] = None,
+    payment_mode: Optional[str] = None,
+    order_status: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    search: Optional[str] = None,
+    sort_by: str = "revenue",
+    sort_order: str = "desc",
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    filepath = ExportService.export_pincodes(
+        db,
+        format_type=format,
+        preset=preset,
+        start_date=start_date,
+        end_date=end_date,
+        product_id=product_id,
+        district=district,
+        district_id=district_id,
+        employee_id=employee_id,
+        payment_mode=payment_mode,
+        order_status=order_status,
+        customer_id=customer_id,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit
+    )
+    filename = os.path.basename(filepath)
+    media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if format == "xlsx" else "text/csv"
+    return FileResponse(path=filepath, filename=filename, media_type=media_type)
+
+@router.get("/post-offices")
+def export_post_offices(
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    preset: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    product_id: Optional[int] = None,
+    district: Optional[str] = None,
+    pincode: Optional[str] = None,
+    employee_id: Optional[int] = None,
+    payment_mode: Optional[str] = None,
+    order_status: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    search: Optional[str] = None,
+    sort_by: str = "revenue",
+    sort_order: str = "desc",
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    filepath = ExportService.export_post_offices(
+        db,
+        format_type=format,
+        preset=preset,
+        start_date=start_date,
+        end_date=end_date,
+        product_id=product_id,
+        district=district,
+        pincode=pincode,
+        employee_id=employee_id,
+        payment_mode=payment_mode,
+        order_status=order_status,
+        customer_id=customer_id,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit
+    )
     filename = os.path.basename(filepath)
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if format == "xlsx" else "text/csv"
     return FileResponse(path=filepath, filename=filename, media_type=media_type)
 
 @router.get("/products")
 def export_products(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
     db: Session = Depends(get_db)
 ):
     filepath = ExportService.export_products(db, format_type=format)
@@ -89,7 +192,7 @@ def export_products(
 
 @router.get("/employees")
 def export_employees(
-    format: str = Query("xlsx", regex="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
     db: Session = Depends(get_db)
 ):
     filepath = ExportService.export_employees(db, format_type=format)

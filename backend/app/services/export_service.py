@@ -153,10 +153,111 @@ class ExportService:
         return ExportService._save_dataframe(df, "rfm_analytics_export", format_type)
 
     @staticmethod
-    def export_geographic(db: Session, format_type: str = "xlsx") -> str:
-        districts = AnalyticsService.get_district_analytics(db)
-        df = pd.DataFrame(districts) if districts else pd.DataFrame(columns=["district", "state", "customer_count", "total_orders", "total_revenue"])
-        return ExportService._save_dataframe(df, "geographic_analytics_export", format_type)
+    def export_geographic(
+        db: Session,
+        format_type: str = "xlsx",
+        preset: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        product_id: Optional[int] = None,
+        employee_id: Optional[int] = None,
+        payment_mode: Optional[str] = None,
+        order_status: Optional[str] = None,
+        customer_id: Optional[int] = None,
+        search: Optional[str] = None
+    ) -> str:
+        districts = AnalyticsService.get_district_analytics(
+            db,
+            preset=preset,
+            start_date=start_date,
+            end_date=end_date,
+            product_id=product_id,
+            employee_id=employee_id,
+            payment_mode=payment_mode,
+            order_status=order_status,
+            customer_id=customer_id,
+            search=search
+        )
+        df = pd.DataFrame(districts) if districts else pd.DataFrame(columns=["district", "state", "total_orders", "total_revenue", "customer_count"])
+        return ExportService._save_dataframe(df, "district_analytics_export", format_type)
+
+    @staticmethod
+    def export_pincodes(
+        db: Session,
+        format_type: str = "xlsx",
+        preset: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        product_id: Optional[int] = None,
+        district: Optional[str] = None,
+        district_id: Optional[int] = None,
+        employee_id: Optional[int] = None,
+        payment_mode: Optional[str] = None,
+        order_status: Optional[str] = None,
+        customer_id: Optional[int] = None,
+        search: Optional[str] = None,
+        sort_by: str = "revenue",
+        sort_order: str = "desc",
+        limit: int = 1000
+    ) -> str:
+        pincodes = AnalyticsService.get_pincode_analytics(
+            db,
+            preset=preset,
+            start_date=start_date,
+            end_date=end_date,
+            product_id=product_id,
+            district=district,
+            district_id=district_id,
+            employee_id=employee_id,
+            payment_mode=payment_mode,
+            order_status=order_status,
+            customer_id=customer_id,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit
+        )
+        df = pd.DataFrame(pincodes) if pincodes else pd.DataFrame(columns=["pincode", "district", "state", "total_orders", "total_revenue", "customer_count"])
+        return ExportService._save_dataframe(df, "pincode_analytics_export", format_type)
+
+    @staticmethod
+    def export_post_offices(
+        db: Session,
+        format_type: str = "xlsx",
+        preset: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        product_id: Optional[int] = None,
+        district: Optional[str] = None,
+        pincode: Optional[str] = None,
+        employee_id: Optional[int] = None,
+        payment_mode: Optional[str] = None,
+        order_status: Optional[str] = None,
+        customer_id: Optional[int] = None,
+        search: Optional[str] = None,
+        sort_by: str = "revenue",
+        sort_order: str = "desc",
+        limit: int = 1000
+    ) -> str:
+        post_offices = AnalyticsService.get_post_office_analytics(
+            db,
+            preset=preset,
+            start_date=start_date,
+            end_date=end_date,
+            product_id=product_id,
+            district=district,
+            pincode=pincode,
+            employee_id=employee_id,
+            payment_mode=payment_mode,
+            order_status=order_status,
+            customer_id=customer_id,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit
+        )
+        df = pd.DataFrame(post_offices) if post_offices else pd.DataFrame(columns=["post_office", "pincode", "district", "total_orders", "total_revenue", "customer_count"])
+        return ExportService._save_dataframe(df, "post_office_analytics_export", format_type)
 
     @staticmethod
     def export_products(db: Session, format_type: str = "xlsx") -> str:

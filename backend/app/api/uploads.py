@@ -29,7 +29,8 @@ def confirm_import(request: ImportConfirmRequest, db: Session = Depends(get_db))
             original_filename=request.file_name,
             import_type=request.import_type,
             column_mapping=request.column_mapping,
-            db=db
+            db=db,
+            sheet_name=request.sheet_name
         )
         return batch
     except ValueError as e:

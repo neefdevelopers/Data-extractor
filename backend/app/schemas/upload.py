@@ -6,6 +6,7 @@ class ColumnMapping(BaseModel):
     # standard target field -> source file header name
     customer_name: Optional[str] = None
     contact_number: Optional[str] = None
+    mobile_number: Optional[str] = None
     full_address: Optional[str] = None
     pincode: Optional[str] = None
     post_office: Optional[str] = None
@@ -34,6 +35,7 @@ class FileAnalysisResponse(BaseModel):
     auto_mappings: Dict[str, Optional[str]]
     sample_rows: List[Dict[str, Any]]
     validation_warnings: List[str] = []
+    available_sheets: List[str] = []
 
 class ImportConfirmRequest(BaseModel):
     temp_file_id: str
@@ -41,6 +43,7 @@ class ImportConfirmRequest(BaseModel):
     import_type: str  # CUSTOMER, ORDER, PRODUCT, COMBINED
     column_mapping: Dict[str, Optional[str]]
     update_existing: bool = True
+    sheet_name: Optional[str] = None
 
 class UploadRowOut(BaseModel):
     id: int

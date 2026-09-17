@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
+  BarChart3,
   Users,
   Package,
   MapPin,
@@ -15,6 +16,7 @@ import {
 
 const NAV_ITEMS = [
   { name: 'Business Dashboard', path: '/', icon: LayoutDashboard },
+  { name: 'Analytic Dashboard', path: '/analytic-dashboard', icon: BarChart3 },
   { name: 'Data Drill-down', path: '/drilldown', icon: GitFork },
   { name: 'Customers CRM', path: '/customers', icon: Users },
   { name: 'Product Analytics', path: '/products', icon: Package },
