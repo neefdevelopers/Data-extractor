@@ -1,149 +1,107 @@
 import re
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
 from app.utils.text_normalization import canonical_key, clean_display_text
 
-# Canonical Kerala Districts and their aliases, spelling variations, old names, and Malayalam script equivalents
-KERALA_DISTRICT_MAP: Dict[str, Tuple[str, str]] = {
-    # District Canonical Name: (Display Name, State)
-    # 1. Kozhikode
-    "kozhikode": ("Kozhikode", "Kerala"),
-    "calicut": ("Kozhikode", "Kerala"),
-    "kozhikkode": ("Kozhikode", "Kerala"),
-    "kozhikod": ("Kozhikode", "Kerala"),
-    "kozhikkod": ("Kozhikode", "Kerala"),
-    "kozhikide": ("Kozhikode", "Kerala"),
-    "kozhikot": ("Kozhikode", "Kerala"),
-    "kozikkode": ("Kozhikode", "Kerala"),
-    "kozikkod": ("Kozhikode", "Kerala"),
-    "kozohide": ("Kozhikode", "Kerala"),
-    "കോഴിക്കോട്": ("Kozhikode", "Kerala"),
-    "കാലിക്കറ്റ്": ("Kozhikode", "Kerala"),
+# Master list of 14 Kerala Districts for initial database seeding
+OFFICIAL_KERALA_DISTRICTS: List[Tuple[str, str, str, List[str]]] = [
+    # (canonical_name, state, normalized_key, aliases)
+    (
+        "Malappuram", "Kerala", "malappuram",
+        ["malappuram", "malapuram", "malppuram", "mlp", "മലപ്പുറം", "മലപ്പുറം ജില്ല", "മലപ്പുറം ഡിസ്ട്രിക്ട്", "malappuram district", "malappuram dist", "malappuram jilla"]
+    ),
+    (
+        "Kozhikode", "Kerala", "kozhikode",
+        ["kozhikode", "calicut", "kozhikkode", "kozhikod", "kozhikkod", "kozhikide", "kozhikot", "kozikkode", "kozikkod", "kozohide", "കോഴിക്കോട്", "കാലിക്കറ്റ്", "കോഴിക്കോട് ജില്ല", "kozhikode district", "calicut district"]
+    ),
+    (
+        "Ernakulam", "Kerala", "ernakulam",
+        ["ernakulam", "eranakulam", "earnakulam", "enranakulam", "cochin", "cochi", "kochi", "എറണാകുളം", "എറന്നാകുളം", "കൊച്ചി", "എറണാകുളം ജില്ല", "ernakulam district", "cochin district"]
+    ),
+    (
+        "Thrissur", "Kerala", "thrissur",
+        ["thrissur", "trissur", "thirssur", "thrissuur", "thrissure", "trichur", "തൃശ്ശൂർ", "തൃശൂർ", "തൃശൂർ ജില്ല", "തൃശ്ശൂർ ജില്ല", "thrissur district", "trichur district"]
+    ),
+    (
+        "Kannur", "Kerala", "kannur",
+        ["kannur", "cannanore", "കണ്ണൂർ", "കണ്ണൂർ ജില്ല", "kannur district", "cannanore district"]
+    ),
+    (
+        "Palakkad", "Kerala", "palakkad",
+        ["palakkad", "palakad", "paalakkad", "plakkad", "palghat", "പാലക്കാട്", "പാലക്കാട് ജില്ല", "palakkad district", "palghat district"]
+    ),
+    (
+        "Alappuzha", "Kerala", "alappuzha",
+        ["alappuzha", "alapuzha", "alleppey", "ആലപ്പുഴ", "ആലപ്പുഴ ജില്ല", "alappuzha district", "alleppey district"]
+    ),
+    (
+        "Kollam", "Kerala", "kollam",
+        ["kollam", "kollom", "quilon", "കൊല്ലം", "കൊല്ലം ജില്ല", "kollam district", "quilon district"]
+    ),
+    (
+        "Kottayam", "Kerala", "kottayam",
+        ["kottayam", "kottyam", "കോട്ടയം", "കോട്ടയം ജില്ല", "kottayam district"]
+    ),
+    (
+        "Thiruvananthapuram", "Kerala", "thiruvananthapuram",
+        ["thiruvananthapuram", "trivandrum", "tvm", "tiruvanthapuram", "tiruvananthpuram", "thiruvanandhapuram", "thiruvunanthapuram", "തിരുവനന്തപുരം", "തിരുവനന്തപുരം ജില്ല", "thiruvananthapuram district", "trivandrum district"]
+    ),
+    (
+        "Wayanad", "Kerala", "wayanad",
+        ["wayanad", "wayand", "wynad", "വയനാട്", "വയനാട് ജില്ല", "wayanad district", "wynad district"]
+    ),
+    (
+        "Kasaragod", "Kerala", "kasaragod",
+        ["kasaragod", "kasargod", "kasargood", "kasrgod", "kasarkod", "കാസർഗോഡ്", "കാസർകോട്", "കാസർഗോഡ് ജില്ല", "കാസർകോട് ജില്ല", "kasaragod district", "kasargod district"]
+    ),
+    (
+        "Idukki", "Kerala", "idukki",
+        ["idukki", "iduki", "ഇടുക്കി", "ഇടുക്കി ജില്ല", "idukki district"]
+    ),
+    (
+        "Pathanamthitta", "Kerala", "pathanamthitta",
+        ["pathanamthitta", "pathanamtitta", "പത്തനംതിട്ട", "പത്തനംതിട്ട ജില്ല", "pathanamthitta district"]
+    ),
+]
 
-    # 2. Malappuram
-    "malappuram": ("Malappuram", "Kerala"),
-    "malapuram": ("Malappuram", "Kerala"),
-    "malppuram": ("Malappuram", "Kerala"),
-    "mlp": ("Malappuram", "Kerala"),
-    "മലപ്പുറം": ("Malappuram", "Kerala"),
+# Major Indian Cities / Other Neighboring Districts
+OTHER_MAJOR_DISTRICTS: List[Tuple[str, str, str, List[str]]] = [
+    ("Bengaluru", "Karnataka", "bengaluru", ["bengaluru", "bangalore", "bangalore rural", "banglore", "bangloore", "ബെംഗളൂരു", "ബാംഗ്ലൂർ"]),
+    ("Chennai", "Tamil Nadu", "chennai", ["chennai", "madras", "ചെന്നൈ"]),
+    ("Coimbatore", "Tamil Nadu", "coimbatore", ["coimbatore", "കോയമ്പത്തൂർ"]),
+    ("Mumbai", "Maharashtra", "mumbai", ["mumbai", "bombay", "മുംബൈ"]),
+    ("Hyderabad", "Telangana", "hyderabad", ["hyderabad", "ഹൈദരാബാദ്"]),
+    ("Kolkata", "West Bengal", "kolkata", ["kolkata", "calcutta", "കൊൽക്കത്ത"]),
+    ("New Delhi", "Delhi", "new delhi", ["new delhi", "delhi", "ഡൽഹി"]),
+    ("Dakshina Kannada", "Karnataka", "dakshina kannada", ["dakshina kannada", "mangalore", "mangaluru", "മംഗലാപുരം", "മംഗളൂരു"]),
+    ("Lakshadweep", "Lakshadweep", "lakshadweep", ["lakshadweep", "india lakshadweep", "ലക്ഷദ്വീപ്"]),
+    ("Salem", "Tamil Nadu", "salem", ["salem"]),
+    ("Vellore", "Tamil Nadu", "vellore", ["vellore"]),
+    ("Nilgiris", "Tamil Nadu", "nilgiris", ["nilgiris", "ooty"]),
+    ("Pune", "Maharashtra", "pune", ["pune"]),
+    ("Jaipur", "Rajasthan", "jaipur", ["jaipur"]),
+    ("Ahmedabad", "Gujarat", "ahmedabad", ["ahmedabad"]),
+    ("Chandigarh", "Chandigarh", "chandigarh", ["chandigarh"]),
+]
 
-    # 3. Ernakulam
-    "ernakulam": ("Ernakulam", "Kerala"),
-    "eranakulam": ("Ernakulam", "Kerala"),
-    "earnakulam": ("Ernakulam", "Kerala"),
-    "enranakulam": ("Ernakulam", "Kerala"),
-    "cochin": ("Ernakulam", "Kerala"),
-    "cochi": ("Ernakulam", "Kerala"),
-    "kochi": ("Ernakulam", "Kerala"),
-    "എറണാകുളം": ("Ernakulam", "Kerala"),
-    "എറന്നാകുളം": ("Ernakulam", "Kerala"),
+# Build lookup dictionary mapping every alias, variation, and Malayalam text to (canonical_name, state, normalized_key)
+DISTRICT_LOOKUP_MAP: Dict[str, Tuple[str, str, str]] = {}
 
-    # 4. Thrissur
-    "thrissur": ("Thrissur", "Kerala"),
-    "trissur": ("Thrissur", "Kerala"),
-    "thirssur": ("Thrissur", "Kerala"),
-    "thrissuur": ("Thrissur", "Kerala"),
-    "thrissure": ("Thrissur", "Kerala"),
-    "trichur": ("Thrissur", "Kerala"),
-    "തൃശ്ശൂർ": ("Thrissur", "Kerala"),
-    "തൃശൂർ": ("Thrissur", "Kerala"),
-
-    # 5. Kannur
-    "kannur": ("Kannur", "Kerala"),
-    "cannanore": ("Kannur", "Kerala"),
-    "കണ്ണൂർ": ("Kannur", "Kerala"),
-
-    # 6. Palakkad
-    "palakkad": ("Palakkad", "Kerala"),
-    "palakad": ("Palakkad", "Kerala"),
-    "paalakkad": ("Palakkad", "Kerala"),
-    "plakkad": ("Palakkad", "Kerala"),
-    "palghat": ("Palakkad", "Kerala"),
-    "പാലക്കാട്": ("Palakkad", "Kerala"),
-
-    # 7. Alappuzha
-    "alappuzha": ("Alappuzha", "Kerala"),
-    "alapuzha": ("Alappuzha", "Kerala"),
-    "alleppey": ("Alappuzha", "Kerala"),
-    "ആലപ്പുഴ": ("Alappuzha", "Kerala"),
-
-    # 8. Kollam
-    "kollam": ("Kollam", "Kerala"),
-    "kollom": ("Kollam", "Kerala"),
-    "quilon": ("Kollam", "Kerala"),
-    "കൊല്ലം": ("Kollam", "Kerala"),
-
-    # 9. Kottayam
-    "kottayam": ("Kottayam", "Kerala"),
-    "kottyam": ("Kottayam", "Kerala"),
-    "കോട്ടയം": ("Kottayam", "Kerala"),
-
-    # 10. Thiruvananthapuram
-    "thiruvananthapuram": ("Thiruvananthapuram", "Kerala"),
-    "trivandrum": ("Thiruvananthapuram", "Kerala"),
-    "tvm": ("Thiruvananthapuram", "Kerala"),
-    "tiruvanthapuram": ("Thiruvananthapuram", "Kerala"),
-    "tiruvananthpuram": ("Thiruvananthapuram", "Kerala"),
-    "thiruvanandhapuram": ("Thiruvananthapuram", "Kerala"),
-    "thiruvunanthapuram": ("Thiruvananthapuram", "Kerala"),
-    "തിരുവനന്തപുരം": ("Thiruvananthapuram", "Kerala"),
-
-    # 11. Wayanad
-    "wayanad": ("Wayanad", "Kerala"),
-    "wayand": ("Wayanad", "Kerala"),
-    "wynad": ("Wayanad", "Kerala"),
-    "വയനാട്": ("Wayanad", "Kerala"),
-
-    # 12. Kasaragod
-    "kasaragod": ("Kasaragod", "Kerala"),
-    "kasargod": ("Kasaragod", "Kerala"),
-    "kasargood": ("Kasaragod", "Kerala"),
-    "kasrgod": ("Kasaragod", "Kerala"),
-    "kasarkod": ("Kasaragod", "Kerala"),
-    "കാസർഗോഡ്": ("Kasaragod", "Kerala"),
-
-    # 13. Idukki
-    "idukki": ("Idukki", "Kerala"),
-    "iduki": ("Idukki", "Kerala"),
-    "ഇടുക്കി": ("Idukki", "Kerala"),
-
-    # 14. Pathanamthitta
-    "pathanamthitta": ("Pathanamthitta", "Kerala"),
-    "pathanamtitta": ("Pathanamthitta", "Kerala"),
-    "പത്തനംതിട്ട": ("Pathanamthitta", "Kerala"),
-
-    # Other common neighboring regions / major cities
-    "bengaluru": ("Bengaluru", "Karnataka"),
-    "bangalore": ("Bengaluru", "Karnataka"),
-    "bangalore rural": ("Bengaluru", "Karnataka"),
-    "banglore": ("Bengaluru", "Karnataka"),
-    "bangloore": ("Bengaluru", "Karnataka"),
-    "chennai": ("Chennai", "Tamil Nadu"),
-    "madras": ("Chennai", "Tamil Nadu"),
-    "coimbatore": ("Coimbatore", "Tamil Nadu"),
-    "mumbai": ("Mumbai", "Maharashtra"),
-    "bombay": ("Mumbai", "Maharashtra"),
-    "hyderabad": ("Hyderabad", "Telangana"),
-    "kolkata": ("Kolkata", "West Bengal"),
-    "calcutta": ("Kolkata", "West Bengal"),
-    "new delhi": ("New Delhi", "Delhi"),
-    "delhi": ("New Delhi", "Delhi"),
-    "dakshina kannada": ("Dakshina Kannada", "Karnataka"),
-    "mangalore": ("Dakshina Kannada", "Karnataka"),
-    "mangaluru": ("Dakshina Kannada", "Karnataka"),
-    "lakshadweep": ("Lakshadweep", "Lakshadweep"),
-    "india lakshadweep": ("Lakshadweep", "Lakshadweep"),
-    "salem": ("Salem", "Tamil Nadu"),
-    "vellore": ("Vellore", "Tamil Nadu"),
-    "nilgiris": ("Nilgiris", "Tamil Nadu"),
-    "pune": ("Pune", "Maharashtra"),
-    "jaipur": ("Jaipur", "Rajasthan"),
-    "ahmedabad": ("Ahmedabad", "Gujarat"),
-    "chandigarh": ("Chandigarh", "Chandigarh")
-}
+for canonical_name, state, norm_key, aliases in (OFFICIAL_KERALA_DISTRICTS + OTHER_MAJOR_DISTRICTS):
+    # Map normalized key itself
+    DISTRICT_LOOKUP_MAP[norm_key] = (canonical_name, state, norm_key)
+    DISTRICT_LOOKUP_MAP[canonical_name.lower()] = (canonical_name, state, norm_key)
+    for alias in aliases:
+        a_clean = str(alias).strip()
+        if a_clean:
+            DISTRICT_LOOKUP_MAP[a_clean] = (canonical_name, state, norm_key)
+            DISTRICT_LOOKUP_MAP[a_clean.lower()] = (canonical_name, state, norm_key)
+            a_key = canonical_key(a_clean)
+            if a_key:
+                DISTRICT_LOOKUP_MAP[a_key] = (canonical_name, state, norm_key)
 
 def clean_district_string(raw: Optional[str]) -> str:
     """
-    Cleans punctuation, leading symbols, trailing commas/dots from district input.
+    Cleans punctuation, symbols, and standardizes spacing.
     """
     if not raw:
         return ""
@@ -151,6 +109,17 @@ def clean_district_string(raw: Optional[str]) -> str:
     # Strip leading/trailing punctuation like '-,:;./'
     s = re.sub(r"^[\s\-_,:;./\\|]+", "", s)
     s = re.sub(r"[\s\-_,:;./\\|]+$", "", s)
+    return " ".join(s.split()).strip()
+
+def strip_district_suffixes(raw: str) -> str:
+    """
+    Strips generic words like 'district', 'dist', 'jilla', 'ജില്ല' from district text.
+    """
+    s = raw.strip()
+    # English suffixes
+    s = re.sub(r"(?i)\b(district|dist|jilla|dt|d\.t)\b", "", s)
+    # Malayalam suffixes
+    s = re.sub(r"(ജില്ല|ഡിസ്ട്രിക്ട്)", "", s)
     return " ".join(s.split()).strip()
 
 def normalize_district_name(raw_district: Optional[str], state_hint: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
@@ -162,29 +131,58 @@ def normalize_district_name(raw_district: Optional[str], state_hint: Optional[st
         return None, state_hint
 
     cleaned = clean_district_string(raw_district)
-    if not cleaned or cleaned.lower() in ["nan", "none", "null", "undefined", "unknown", "unassigned", "unassigned / unknown", "n/a", "unknown district"]:
+    if not cleaned or cleaned.lower() in [
+        "nan", "none", "null", "undefined", "unknown", "unassigned",
+        "unassigned / unknown", "n/a", "unknown district", "0", "-"
+    ]:
         return None, state_hint
 
-    key = canonical_key(cleaned)
-    
-    # 1. Direct exact map lookup
-    if key in KERALA_DISTRICT_MAP:
-        dist_name, dist_state = KERALA_DISTRICT_MAP[key]
-        return dist_name, dist_state
+    # 1. Exact lookup with raw string & lowercase
+    if cleaned in DISTRICT_LOOKUP_MAP:
+        name, st, _ = DISTRICT_LOOKUP_MAP[cleaned]
+        return name, st
 
-    # 2. Check Malayalam direct string match
     cleaned_lower = cleaned.lower()
-    if cleaned_lower in KERALA_DISTRICT_MAP:
-        return KERALA_DISTRICT_MAP[cleaned_lower]
+    if cleaned_lower in DISTRICT_LOOKUP_MAP:
+        name, st, _ = DISTRICT_LOOKUP_MAP[cleaned_lower]
+        return name, st
 
-    # 3. Substring / compound district pattern (e.g. "Malappuram (Manjeri)", "Calicut vadakar", "Kozhikode, Feroke kallikkudam", "Palakkad, mannarkkad")
-    for alias_key, (canonical_name, canonical_st) in KERALA_DISTRICT_MAP.items():
-        # Word boundary or prefix match for key district aliases
+    # 2. Key-based lookup after canonical normalization
+    key = canonical_key(cleaned)
+    if key in DISTRICT_LOOKUP_MAP:
+        name, st, _ = DISTRICT_LOOKUP_MAP[key]
+        return name, st
+
+    # 3. Strip district suffixes (e.g. 'Malappuram District' -> 'Malappuram', 'മലപ്പുറം ജില്ല' -> 'മലപ്പുറം')
+    stripped = strip_district_suffixes(cleaned)
+    if stripped:
+        if stripped in DISTRICT_LOOKUP_MAP:
+            name, st, _ = DISTRICT_LOOKUP_MAP[stripped]
+            return name, st
+        stripped_lower = stripped.lower()
+        if stripped_lower in DISTRICT_LOOKUP_MAP:
+            name, st, _ = DISTRICT_LOOKUP_MAP[stripped_lower]
+            return name, st
+        stripped_key = canonical_key(stripped)
+        if stripped_key in DISTRICT_LOOKUP_MAP:
+            name, st, _ = DISTRICT_LOOKUP_MAP[stripped_key]
+            return name, st
+
+    # 4. Token / Substring matching for compound district names (e.g. "Malappuram (Manjeri)", "Calicut vadakara", "Kozhikode, Feroke")
+    for alias_key, (canonical_name, canonical_st, _) in DISTRICT_LOOKUP_MAP.items():
         if len(alias_key) >= 4 and (alias_key in key or alias_key in cleaned_lower):
-            # Check if it starts with alias or has alias as distinct token
             tokens = re.split(r"[\s,/\-()]+", key)
             if alias_key in tokens or any(t.startswith(alias_key) for t in tokens):
                 return canonical_name, canonical_st
 
-    # 4. Fallback: clean display text with Title Case
-    return clean_display_text(cleaned, title_case=True), state_hint or "Kerala"
+    # 5. Fallback: clean title-cased display text
+    return clean_display_text(stripped or cleaned, title_case=True), state_hint or "Kerala"
+
+def get_normalized_district_key(raw_district: Optional[str]) -> Optional[str]:
+    """
+    Returns the normalized key for comparison / DB unique lookup (e.g. 'malappuram'), or None if unknown.
+    """
+    canonical_name, _ = normalize_district_name(raw_district)
+    if not canonical_name:
+        return None
+    return canonical_key(canonical_name)

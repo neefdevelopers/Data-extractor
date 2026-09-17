@@ -14,6 +14,7 @@ class Customer(Base):
     full_address = Column(Text, nullable=True)
     pincode = Column(String(10), nullable=True, index=True)
     post_office = Column(String(255), nullable=True)
+    district_id = Column(Integer, ForeignKey("district_master.id", ondelete="SET NULL"), nullable=True, index=True)
     district = Column(String(255), nullable=True, index=True)
     state = Column(String(255), nullable=True)
     
@@ -32,6 +33,7 @@ class Customer(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     # Relationships
+    district_master = relationship("DistrictMaster", back_populates="customers", foreign_keys=[district_id])
     orders = relationship("Order", back_populates="customer", cascade="all, delete-orphan")
     rfm_details = relationship("RFMScore", back_populates="customer", uselist=False, cascade="all, delete-orphan")
 
@@ -39,6 +41,7 @@ class Customer(Base):
         Index('idx_cust_mobile', 'normalized_contact'),
         Index('idx_cust_pin', 'pincode'),
         Index('idx_cust_district', 'district'),
+        Index('idx_cust_district_id', 'district_id'),
         Index('idx_cust_segment', 'rfm_segment'),
         Index('idx_cust_name_ci', func.lower(func.trim(customer_name))),
         Index('idx_cust_district_ci', func.lower(func.trim(district))),
