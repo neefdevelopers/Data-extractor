@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Set
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, distinct
 from dateutil.relativedelta import relativedelta
@@ -8,6 +8,7 @@ from app.models.order import Order
 from app.models.product import Product
 from app.models.employee import Employee
 from app.models.order_item import OrderItem
+from app.models.district import DistrictMaster
 from app.services.revenue_service import RevenueService
 from app.services.district_resolution_service import DistrictResolutionService
 from app.utils.text_normalization import canonical_key, clean_display_text, ci_contains, ci_equals
@@ -114,58 +115,76 @@ class AnalyticsService:
             order_status=order_status,
             search=search
         )
-        orders = order_q.all()
+        # Select only required lightweight columns instead of loading full ORM Order objects
+        order_rows = order_q.with_entities(
+            Order.id,
+            Order.total_amount,
+            Order.customer_id,
+            Order.payment_mode,
+            Order.order_date
+        ).all()
 
-        total_orders = len(orders)
-        total_revenue = sum(float(o.total_amount or 0.0) for o in orders)
+        total_orders = len(order_rows)
+        total_revenue = sum(float(r[1] or 0.0) for r in order_rows)
         aov = (total_revenue / total_orders) if total_orders > 0 else 0.0
         
         # Unique customers in filtered orders
         dt_start, dt_end = AnalyticsService.parse_date_preset(preset, start_date, end_date)
-        unique_customer_ids = set(o.customer_id for o in orders if o.customer_id)
+        unique_customer_ids = set(r[2] for r in order_rows if r[2])
         has_filter = bool(dt_start or dt_end or employee_id or customer_id or payment_mode or district or pincode or product_id or rfm_segment or order_status or search)
         total_customers = len(unique_customer_ids) if has_filter else db.query(Customer).count()
         total_products = db.query(Product).count()
 
         # COD vs Prepaid breakdown (case-insensitive)
-        cod_orders = [o for o in orders if canonical_key(o.payment_mode) == "cod"]
-        prepaid_orders = [o for o in orders if canonical_key(o.payment_mode) in ["prepaid", "online", "upi", "card"]]
+        cod_rev = 0.0
+        cod_count = 0
+        prepaid_rev = 0.0
+        prepaid_count = 0
 
-        cod_rev = sum(float(o.total_amount or 0.0) for o in cod_orders)
-        prepaid_rev = sum(float(o.total_amount or 0.0) for o in prepaid_orders)
-        cod_aov = round(cod_rev / len(cod_orders), 2) if len(cod_orders) > 0 else 0.0
-        prepaid_aov = round(prepaid_rev / len(prepaid_orders), 2) if len(prepaid_orders) > 0 else 0.0
+        date_map: Dict[str, Dict[str, Any]] = {}
+
+        for r in order_rows:
+            amt = float(r[1] or 0.0)
+            pm = canonical_key(r[3] or "")
+            if pm == "cod":
+                cod_rev += amt
+                cod_count += 1
+            elif pm in ["prepaid", "online", "upi", "card"]:
+                prepaid_rev += amt
+                prepaid_count += 1
+
+            if r[4]:
+                d_str = r[4].strftime("%Y-%m-%d")
+                if d_str not in date_map:
+                    date_map[d_str] = {"date": d_str, "revenue": 0.0, "orders": 0}
+                date_map[d_str]["revenue"] += amt
+                date_map[d_str]["orders"] += 1
+
+        cod_aov = round(cod_rev / cod_count, 2) if cod_count > 0 else 0.0
+        prepaid_aov = round(prepaid_rev / prepaid_count, 2) if prepaid_count > 0 else 0.0
 
         payment_breakdown = [
             {
                 "payment_mode": "COD",
-                "revenue": float(cod_rev),
-                "order_count": len(cod_orders),
+                "revenue": round(cod_rev, 2),
+                "order_count": cod_count,
                 "average_order_value": cod_aov,
                 "percentage_revenue": round((cod_rev / total_revenue * 100.0) if total_revenue > 0 else 0.0, 1),
-                "percentage_orders": round((len(cod_orders) / total_orders * 100.0) if total_orders > 0 else 0.0, 1)
+                "percentage_orders": round((cod_count / total_orders * 100.0) if total_orders > 0 else 0.0, 1)
             },
             {
                 "payment_mode": "PREPAID",
-                "revenue": float(prepaid_rev),
-                "order_count": len(prepaid_orders),
+                "revenue": round(prepaid_rev, 2),
+                "order_count": prepaid_count,
                 "average_order_value": prepaid_aov,
                 "percentage_revenue": round((prepaid_rev / total_revenue * 100.0) if total_revenue > 0 else 0.0, 1),
-                "percentage_orders": round((len(prepaid_orders) / total_orders * 100.0) if total_orders > 0 else 0.0, 1)
+                "percentage_orders": round((prepaid_count / total_orders * 100.0) if total_orders > 0 else 0.0, 1)
             }
         ]
 
-        # Date-wise trend points
-        date_map: Dict[str, Dict[str, Any]] = {}
-        for o in sorted(orders, key=lambda x: x.order_date):
-            d_str = o.order_date.strftime("%Y-%m-%d")
-            if d_str not in date_map:
-                date_map[d_str] = {"date": d_str, "revenue": 0.0, "orders": 0}
-            date_map[d_str]["revenue"] += float(o.total_amount or 0.0)
-            date_map[d_str]["orders"] += 1
-
         revenue_trend = []
-        for d_str, val in sorted(date_map.items()):
+        for d_str in sorted(date_map.keys()):
+            val = date_map[d_str]
             cnt = val["orders"]
             rev = val["revenue"]
             revenue_trend.append({
@@ -183,8 +202,8 @@ class AnalyticsService:
             "total_products": total_products,
             "cod_revenue": round(cod_rev, 2),
             "prepaid_revenue": round(prepaid_rev, 2),
-            "cod_orders": len(cod_orders),
-            "prepaid_orders": len(prepaid_orders),
+            "cod_orders": cod_count,
+            "prepaid_orders": prepaid_count,
             "cod_aov": cod_aov,
             "prepaid_aov": prepaid_aov,
             "revenue_trend": revenue_trend,
@@ -329,12 +348,17 @@ class AnalyticsService:
             order_status=order_status,
             search=search
         )
-        orders = order_q.all()
-        total_orders = len(orders)
-        total_revenue = sum(float(o.total_amount or 0.0) for o in orders)
+        
+        row = order_q.with_entities(
+            func.count(Order.id),
+            func.coalesce(func.sum(Order.total_amount), 0.0),
+            func.count(distinct(Order.customer_id))
+        ).first()
+
+        total_orders = row[0] or 0
+        total_revenue = float(row[1] or 0.0)
+        total_customers = row[2] or 0
         aov = (total_revenue / total_orders) if total_orders > 0 else 0.0
-        unique_customers = set(o.customer_id for o in orders if o.customer_id)
-        total_customers = len(unique_customers)
 
         return {
             "total_orders": total_orders,
@@ -380,41 +404,48 @@ class AnalyticsService:
             order_status=order_status,
             search=search
         )
-        orders = order_q.all()
+        
+        # Single fast query fetching flat entity tuples with outer join
+        dist_rows = order_q.outerjoin(DistrictMaster, Customer.district_id == DistrictMaster.id).with_entities(
+            Order.id,
+            Order.total_amount,
+            Order.customer_id,
+            Customer.id,
+            Customer.district_id,
+            DistrictMaster.id.label("dm_id"),
+            DistrictMaster.canonical_name.label("dm_name"),
+            DistrictMaster.normalized_key.label("dm_key"),
+            DistrictMaster.state.label("dm_state"),
+            Customer.district.label("c_dist"),
+            Customer.pincode.label("c_pin")
+        ).all()
 
         district_data: Dict[str, Dict[str, Any]] = {}
         cust_map: Dict[str, Set[int]] = {}
+        dist_cache: Dict[str, Tuple[Optional[int], str, str, str]] = {}
 
-        for o in orders:
-            c = o.customer
-            if c:
-                if c.district_master:
-                    d_id = c.district_master.id
-                    d_name = c.district_master.canonical_name
-                    d_key = c.district_master.normalized_key
-                    d_state = c.district_master.state
-                elif c.district and c.district.strip():
-                    dist_res = DistrictResolutionService.resolve_district(c.district, pincode=c.pincode, db=db, allow_postal_lookup=False)
+        for o_id, total_amount, cust_id, c_id, c_dist_id, dm_id, dm_name, dm_key, dm_state, c_dist, c_pin in dist_rows:
+            if dm_name:
+                d_id = dm_id
+                d_name = dm_name
+                d_key = dm_key or canonical_key(dm_name)
+                d_state = dm_state or "Kerala"
+            elif c_dist and c_dist.strip():
+                clean_d = c_dist.strip()
+                if clean_d not in dist_cache:
+                    dist_res = DistrictResolutionService.resolve_district(clean_d, pincode=c_pin, db=db, allow_postal_lookup=False)
                     if dist_res.is_resolved:
-                        d_id = dist_res.district_id
-                        d_name = dist_res.canonical_name
-                        d_key = canonical_key(dist_res.canonical_name)
-                        d_state = dist_res.state or "Kerala"
+                        dist_cache[clean_d] = (
+                            dist_res.district_id,
+                            dist_res.canonical_name,
+                            canonical_key(dist_res.canonical_name),
+                            dist_res.state or "Kerala"
+                        )
                     else:
-                        d_id = None
-                        d_name = "Unknown District"
-                        d_key = "unknown_district"
-                        d_state = "Kerala"
-                else:
-                    d_id = None
-                    d_name = "Unknown District"
-                    d_key = "unknown_district"
-                    d_state = "Kerala"
+                        dist_cache[clean_d] = (None, "Unknown District", "unknown_district", "Kerala")
+                d_id, d_name, d_key, d_state = dist_cache[clean_d]
             else:
-                d_id = None
-                d_name = "Unknown District"
-                d_key = "unknown_district"
-                d_state = "Kerala"
+                d_id, d_name, d_key, d_state = None, "Unknown District", "unknown_district", "Kerala"
 
             if d_key not in district_data:
                 district_data[d_key] = {
@@ -428,12 +459,13 @@ class AnalyticsService:
                 cust_map[d_key] = set()
 
             district_data[d_key]["total_orders"] += 1
-            district_data[d_key]["total_revenue"] += float(o.total_amount or 0.0)
-            if o.customer_id:
-                cust_map[d_key].add(o.customer_id)
+            district_data[d_key]["total_revenue"] += float(total_amount or 0.0)
+            if cust_id:
+                cust_map[d_key].add(cust_id)
 
-        if not orders and (preset == "all" or not preset) and not start_date and not end_date and not product_id and not employee_id and not payment_mode and not order_status:
-            cust_q = db.query(Customer)
+        # Fallback for empty orders when no transactional filter is active
+        if not dist_rows and (preset == "all" or not preset) and not start_date and not end_date and not product_id and not employee_id and not payment_mode and not order_status:
+            cust_q = db.query(Customer).outerjoin(DistrictMaster, Customer.district_id == DistrictMaster.id)
             if district_id:
                 cust_q = cust_q.filter(Customer.district_id == district_id)
             elif district:
@@ -464,29 +496,41 @@ class AnalyticsService:
                     search_conds.append(func.lower(func.trim(Customer.district)) == search_dist_match[0].lower())
                 cust_q = cust_q.filter(or_(*search_conds))
 
-            for c in cust_q.all():
-                if c.district_master:
-                    d_id = c.district_master.id
-                    d_name = c.district_master.canonical_name
-                    d_key = c.district_master.normalized_key
-                    d_state = c.district_master.state
-                elif c.district and c.district.strip():
-                    dist_res = DistrictResolutionService.resolve_district(c.district, pincode=c.pincode, db=db, allow_postal_lookup=False)
-                    if dist_res.is_resolved:
-                        d_id = dist_res.district_id
-                        d_name = dist_res.canonical_name
-                        d_key = canonical_key(dist_res.canonical_name)
-                        d_state = dist_res.state or "Kerala"
-                    else:
-                        d_id = None
-                        d_name = "Unknown District"
-                        d_key = "unknown_district"
-                        d_state = "Kerala"
+            cust_rows = cust_q.with_entities(
+                Customer.id,
+                Customer.district_id,
+                DistrictMaster.id.label("dm_id"),
+                DistrictMaster.canonical_name.label("dm_name"),
+                DistrictMaster.normalized_key.label("dm_key"),
+                DistrictMaster.state.label("dm_state"),
+                Customer.district.label("c_dist"),
+                Customer.pincode.label("c_pin"),
+                Customer.total_orders,
+                Customer.total_spend
+            ).all()
+
+            for c_id, c_dist_id, dm_id, dm_name, dm_key, dm_state, c_dist, c_pin, c_orders, c_spend in cust_rows:
+                if dm_name:
+                    d_id = dm_id
+                    d_name = dm_name
+                    d_key = dm_key or canonical_key(dm_name)
+                    d_state = dm_state or "Kerala"
+                elif c_dist and c_dist.strip():
+                    clean_d = c_dist.strip()
+                    if clean_d not in dist_cache:
+                        dist_res = DistrictResolutionService.resolve_district(clean_d, pincode=c_pin, db=db, allow_postal_lookup=False)
+                        if dist_res.is_resolved:
+                            dist_cache[clean_d] = (
+                                dist_res.district_id,
+                                dist_res.canonical_name,
+                                canonical_key(dist_res.canonical_name),
+                                dist_res.state or "Kerala"
+                            )
+                        else:
+                            dist_cache[clean_d] = (None, "Unknown District", "unknown_district", "Kerala")
+                    d_id, d_name, d_key, d_state = dist_cache[clean_d]
                 else:
-                    d_id = None
-                    d_name = "Unknown District"
-                    d_key = "unknown_district"
-                    d_state = "Kerala"
+                    d_id, d_name, d_key, d_state = None, "Unknown District", "unknown_district", "Kerala"
 
                 if d_key not in district_data:
                     district_data[d_key] = {
@@ -498,9 +542,9 @@ class AnalyticsService:
                         "total_revenue": 0.0
                     }
                     cust_map[d_key] = set()
-                district_data[d_key]["total_orders"] += (c.total_orders or 0)
-                district_data[d_key]["total_revenue"] += float(c.total_spend or 0.0)
-                cust_map[d_key].add(c.id)
+                district_data[d_key]["total_orders"] += (c_orders or 0)
+                district_data[d_key]["total_revenue"] += float(c_spend or 0.0)
+                cust_map[d_key].add(c_id)
 
         for d_key, data in district_data.items():
             data["customer_count"] = len(cust_map[d_key])
@@ -560,31 +604,42 @@ class AnalyticsService:
             order_status=order_status,
             search=search
         )
-        orders = order_q.all()
+        
+        # Single fast query fetching flat entity tuples with outer join
+        pin_rows = order_q.outerjoin(DistrictMaster, Customer.district_id == DistrictMaster.id).with_entities(
+            Order.id,
+            Order.total_amount,
+            Order.customer_id,
+            Customer.id,
+            Customer.district_id,
+            DistrictMaster.canonical_name.label("dm_name"),
+            DistrictMaster.state.label("dm_state"),
+            Customer.district.label("c_dist"),
+            Customer.pincode.label("c_pin")
+        ).all()
 
         pin_data: Dict[str, Dict[str, Any]] = {}
         cust_map: Dict[str, Set[int]] = {}
+        dist_cache: Dict[str, Tuple[str, str]] = {}
 
-        for o in orders:
-            c = o.customer
-            pin = (c.pincode or "").strip() if c else ""
+        for o_id, total_amount, cust_id, c_id, c_dist_id, dm_name, dm_state, c_dist, c_pin in pin_rows:
+            pin = (c_pin or "").strip()
             pin_display = pin if (pin and pin.isdigit() and len(pin) == 6) else "Unknown Pincode"
             pin_key = pin_display.lower()
 
-            if c:
-                if c.district_master:
-                    d_name = c.district_master.canonical_name
-                    d_state = c.district_master.state
-                elif c.district and c.district.strip():
-                    dist_res = DistrictResolutionService.resolve_district(c.district, pincode=c.pincode, db=db, allow_postal_lookup=False)
-                    d_name = dist_res.canonical_name if dist_res.is_resolved else "Unknown District"
-                    d_state = dist_res.state or "Kerala"
-                else:
-                    d_name = "Unknown District"
-                    d_state = "Kerala"
+            if dm_name:
+                d_name, d_state = dm_name, dm_state or "Kerala"
+            elif c_dist and c_dist.strip():
+                clean_d = c_dist.strip()
+                if clean_d not in dist_cache:
+                    dist_res = DistrictResolutionService.resolve_district(clean_d, pincode=c_pin, db=db, allow_postal_lookup=False)
+                    dist_cache[clean_d] = (
+                        dist_res.canonical_name if dist_res.is_resolved else "Unknown District",
+                        dist_res.state or "Kerala"
+                    )
+                d_name, d_state = dist_cache[clean_d]
             else:
-                d_name = "Unknown District"
-                d_state = "Kerala"
+                d_name, d_state = "Unknown District", "Kerala"
 
             if pin_key not in pin_data:
                 pin_data[pin_key] = {
@@ -598,12 +653,13 @@ class AnalyticsService:
                 cust_map[pin_key] = set()
 
             pin_data[pin_key]["total_orders"] += 1
-            pin_data[pin_key]["total_revenue"] += float(o.total_amount or 0.0)
-            if o.customer_id:
-                cust_map[pin_key].add(o.customer_id)
+            pin_data[pin_key]["total_revenue"] += float(total_amount or 0.0)
+            if cust_id:
+                cust_map[pin_key].add(cust_id)
 
-        if not orders and (preset == "all" or not preset) and not start_date and not end_date and not product_id and not employee_id and not payment_mode and not order_status:
-            cust_q = db.query(Customer)
+        # Fallback for empty orders when no transactional filter is active
+        if not pin_rows and (preset == "all" or not preset) and not start_date and not end_date and not product_id and not employee_id and not payment_mode and not order_status:
+            cust_q = db.query(Customer).outerjoin(DistrictMaster, Customer.district_id == DistrictMaster.id)
             if district_id:
                 cust_q = cust_q.filter(Customer.district_id == district_id)
             elif district:
@@ -634,21 +690,35 @@ class AnalyticsService:
                     search_conds.append(func.lower(func.trim(Customer.district)) == search_dist_match[0].lower())
                 cust_q = cust_q.filter(or_(*search_conds))
 
-            for c in cust_q.all():
-                pin = (c.pincode or "").strip()
+            cust_rows = cust_q.with_entities(
+                Customer.id,
+                Customer.district_id,
+                DistrictMaster.canonical_name.label("dm_name"),
+                DistrictMaster.state.label("dm_state"),
+                Customer.district.label("c_dist"),
+                Customer.pincode.label("c_pin"),
+                Customer.total_orders,
+                Customer.total_spend
+            ).all()
+
+            for c_id, c_dist_id, dm_name, dm_state, c_dist, c_pin, c_orders, c_spend in cust_rows:
+                pin = (c_pin or "").strip()
                 pin_display = pin if (pin and pin.isdigit() and len(pin) == 6) else "Unknown Pincode"
                 pin_key = pin_display.lower()
 
-                if c.district_master:
-                    d_name = c.district_master.canonical_name
-                    d_state = c.district_master.state
-                elif c.district and c.district.strip():
-                    dist_res = DistrictResolutionService.resolve_district(c.district, pincode=c.pincode, db=db, allow_postal_lookup=False)
-                    d_name = dist_res.canonical_name if dist_res.is_resolved else "Unknown District"
-                    d_state = dist_res.state or "Kerala"
+                if dm_name:
+                    d_name, d_state = dm_name, dm_state or "Kerala"
+                elif c_dist and c_dist.strip():
+                    clean_d = c_dist.strip()
+                    if clean_d not in dist_cache:
+                        dist_res = DistrictResolutionService.resolve_district(clean_d, pincode=c_pin, db=db, allow_postal_lookup=False)
+                        dist_cache[clean_d] = (
+                            dist_res.canonical_name if dist_res.is_resolved else "Unknown District",
+                            dist_res.state or "Kerala"
+                        )
+                    d_name, d_state = dist_cache[clean_d]
                 else:
-                    d_name = "Unknown District"
-                    d_state = "Kerala"
+                    d_name, d_state = "Unknown District", "Kerala"
 
                 if pin_key not in pin_data:
                     pin_data[pin_key] = {
@@ -660,9 +730,9 @@ class AnalyticsService:
                         "total_revenue": 0.0
                     }
                     cust_map[pin_key] = set()
-                pin_data[pin_key]["total_orders"] += (c.total_orders or 0)
-                pin_data[pin_key]["total_revenue"] += float(c.total_spend or 0.0)
-                cust_map[pin_key].add(c.id)
+                pin_data[pin_key]["total_orders"] += (c_orders or 0)
+                pin_data[pin_key]["total_revenue"] += float(c_spend or 0.0)
+                cust_map[pin_key].add(c_id)
 
         for pin_key, data in pin_data.items():
             data["customer_count"] = len(cust_map[pin_key])
@@ -722,43 +792,60 @@ class AnalyticsService:
             order_status=order_status,
             search=search
         )
-        orders = order_q.all()
+        
+        # Single fast query fetching flat entity tuples with outer join
+        po_rows = order_q.outerjoin(DistrictMaster, Customer.district_id == DistrictMaster.id).with_entities(
+            Order.id,
+            Order.total_amount,
+            Order.customer_id,
+            Customer.id,
+            Customer.district_id,
+            DistrictMaster.canonical_name.label("dm_name"),
+            DistrictMaster.state.label("dm_state"),
+            Customer.district.label("c_dist"),
+            Customer.pincode.label("c_pin"),
+            Customer.post_office.label("c_po"),
+            Customer.full_address.label("c_addr")
+        ).all()
 
         po_data: Dict[str, Dict[str, Any]] = {}
         cust_map: Dict[str, Set[int]] = {}
+        dist_cache: Dict[str, Tuple[str, str]] = {}
+        po_cache: Dict[Tuple[str, str, str], Optional[str]] = {}
 
-        for o in orders:
-            c = o.customer
-            po_raw = (c.post_office or "").strip() if c else ""
-            if (not po_raw or po_raw.lower() in ["unknown", "unknown post office", "none", "null", "na", "n/a", ""]) and c:
-                from app.services.postal_service import PostalService
-                resolved_po = PostalService.resolve_post_office(
-                    address=c.full_address,
-                    pincode=c.pincode,
-                    source_post_office=c.post_office,
-                    db=db
-                )
-                if resolved_po:
-                    po_raw = resolved_po
+        for o_id, total_amount, cust_id, c_id, c_dist_id, dm_name, dm_state, c_dist, c_pin, c_po, c_addr in po_rows:
+            po_raw = (c_po or "").strip()
+            if (not po_raw or po_raw.lower() in ["unknown", "unknown post office", "none", "null", "na", "n/a", ""]) and (c_addr or c_pin):
+                cache_key = (c_addr or "", c_pin or "", c_po or "")
+                if cache_key not in po_cache:
+                    from app.services.postal_service import PostalService
+                    po_cache[cache_key] = PostalService.resolve_post_office(
+                        address=c_addr,
+                        pincode=c_pin,
+                        source_post_office=c_po,
+                        db=db
+                    )
+                resolved = po_cache[cache_key]
+                if resolved:
+                    po_raw = resolved
 
             po_display = clean_display_text(po_raw, title_case=True) if po_raw else "Unknown Post Office"
-            pin = (c.pincode or "").strip() if c else ""
+            pin = (c_pin or "").strip()
             pin_display = pin if (pin and pin.isdigit() and len(pin) == 6) else ""
 
-            if c:
-                if c.district_master:
-                    d_name = c.district_master.canonical_name
-                    d_state = c.district_master.state
-                elif c.district and c.district.strip():
-                    dist_res = DistrictResolutionService.resolve_district(c.district, pincode=c.pincode, db=db, allow_postal_lookup=False)
-                    d_name = dist_res.canonical_name if dist_res.is_resolved else "Unknown District"
-                    d_state = dist_res.state or "Kerala"
-                else:
-                    d_name = "Unknown District"
-                    d_state = "Kerala"
+            if dm_name:
+                d_name, d_state = dm_name, dm_state or "Kerala"
+            elif c_dist and c_dist.strip():
+                clean_d = c_dist.strip()
+                if clean_d not in dist_cache:
+                    dist_res = DistrictResolutionService.resolve_district(clean_d, pincode=c_pin, db=db, allow_postal_lookup=False)
+                    dist_cache[clean_d] = (
+                        dist_res.canonical_name if dist_res.is_resolved else "Unknown District",
+                        dist_res.state or "Kerala"
+                    )
+                d_name, d_state = dist_cache[clean_d]
             else:
-                d_name = "Unknown District"
-                d_state = "Kerala"
+                d_name, d_state = "Unknown District", "Kerala"
 
             po_key = f"{po_display.lower()}_{pin_display.lower()}_{d_name.lower()}"
 
@@ -775,9 +862,9 @@ class AnalyticsService:
                 cust_map[po_key] = set()
 
             po_data[po_key]["total_orders"] += 1
-            po_data[po_key]["total_revenue"] += float(o.total_amount or 0.0)
-            if o.customer_id:
-                cust_map[po_key].add(o.customer_id)
+            po_data[po_key]["total_revenue"] += float(total_amount or 0.0)
+            if cust_id:
+                cust_map[po_key].add(cust_id)
 
         for po_key, data in po_data.items():
             data["customer_count"] = len(cust_map[po_key])
